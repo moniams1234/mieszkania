@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Oferty mieszkań — Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:       #f1f5f9;
+      --surface:  #ffffff;
+      --border:   #e2e8f0;
+      --text:     #0f172a;
+      --muted:    #64748b;
+      --accent:   #2563eb;
+      --positive: #16a34a;
+      --gdansk:   #2563eb;
+      --warszawa: #d97706;
+      --wroclaw:  #059669;
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; background: var(--bg); color: var(--text); line-height: 1.5; }
+
+    /* ── Topbar ── */
+    .topbar { background: var(--surface); border-bottom: 1px solid var(--border); height: 56px; padding: 0 24px; display: flex; align-items: center; gap: 16px; position: sticky; top: 0; z-index: 20; box-shadow: 0 1px 3px rgba(0,0,0,.07); }
+    .topbar-logo { font-size: 17px; font-weight: 700; white-space: nowrap; }
+
+    /* ── Tabs ── */
+    .tab-nav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; gap: 4px; }
+    .tab-btn { padding: 14px 20px; font-size: 13px; font-weight: 600; color: var(--muted); border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color .15s, border-color .15s; }
+    .tab-btn:hover { color: var(--accent); }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* ── Page wrapper ── */
+    .page { padding: 24px; display: flex; flex-direction: column; gap: 20px; max-width: 1400px; margin: 0 auto; }
+
+    /* ── KPIs ── */
+    .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+    .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+    .kpi-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 6px; }
+    .kpi-value { font-size: 28px; font-weight: 700; line-height: 1.1; }
+    .kpi-value.green { color: var(--positive); }
+    .kpi-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+    /* ── Charts ── */
+    .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+    .chart-title { font-size: 13px; font-weight: 600; margin-bottom: 16px; }
+    .chart-sub { font-size: 11px; color: var(--muted); margin-top: -12px; margin-bottom: 14px; }
+    .chart-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+    .chart-header .chart-title { margin-bottom: 0; }
+    .chart-filter select { border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px; font-size: 12px; color: var(--text); background: var(--bg); outline: none; cursor: pointer; }
+    .chart-filter select:focus { border-color: var(--accent); }
+    .chart-wrap { position: relative; height: 230px; }
+
+    /* ── Filters ── */
+    .filters-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+    .filter-group { display: flex; align-items: center; gap: 6px; }
+    .filter-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); white-space: nowrap; }
+    select, input[type=number] { border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-size: 13px; color: var(--text); background: var(--bg); outline: none; }
+    select:focus, input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
+    input[type=number] { width: 100px; }
+    .sep { color: var(--muted); }
+    .divider { width: 1px; height: 24px; background: var(--border); }
+    .btn { border: none; border-radius: 8px; padding: 7px 18px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .btn:hover { opacity: .85; }
+    .btn-primary   { background: var(--accent); color: #fff; }
+    .btn-secondary { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
+    .ml-auto { margin-left: auto; }
+
+    /* ── Table ── */
+    .table-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+    .table-header { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+    .table-title { font-size: 13px; font-weight: 600; }
+    .table-count { font-size: 12px; color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; }
+    thead tr { background: #f8fafc; }
+    th { padding: 10px 14px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); white-space: nowrap; border-bottom: 1px solid var(--border); text-align: left; }
+    th.sortable { cursor: pointer; }
+    th.sortable:hover { color: var(--accent); }
+    th.sort-active { color: var(--accent); }
+    th.r, td.r { text-align: right; }
+    th.c, td.c { text-align: center; }
+    td { padding: 9px 14px; font-size: 13px; border-bottom: 1px solid var(--border); }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #f8fafc; }
+    .no-results { text-align: center; padding: 48px; color: var(--muted); }
+
+    /* ── Badges ── */
+    .badge { display: inline-block; border-radius: 20px; padding: 2px 9px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+    .badge-pierwotny { background: #dbeafe; color: #1e40af; }
+    .badge-wtorny    { background: #f1f5f9; color: #64748b; }
+
+    .city-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; flex-shrink: 0; }
+    .dot-gdansk   { background: var(--gdansk); }
+    .dot-warszawa { background: var(--warszawa); }
+    .dot-wroclaw  { background: var(--wroclaw); }
+    .price-cell { font-weight: 700; color: var(--positive); }
+    .link-cell a { color: var(--accent); text-decoration: none; }
+    .link-cell a:hover { text-decoration: underline; }
+    .muted { color: var(--muted); }
+
+    /* ── Stats tab ── */
+    .stats-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+    .stats-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .stat-kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+
+    /* Developer table */
+    .dev-table { width: 100%; border-collapse: collapse; }
+    .dev-table th { padding: 9px 14px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); border-bottom: 2px solid var(--border); text-align: left; }
+    .dev-table td { padding: 9px 14px; font-size: 13px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .dev-table tr:last-child td { border-bottom: none; }
+    .dev-table tr:hover td { background: #f8fafc; }
+    .dev-table .r { text-align: right; }
+    .dev-table .c { text-align: center; }
+
+    .pill { display: inline-block; border-radius: 20px; padding: 2px 9px; font-size: 11px; font-weight: 600; }
+    .pill-blue   { background: #dbeafe; color: #1e40af; }
+    .pill-green  { background: #d1fae5; color: #065f46; }
+    .pill-orange { background: #fef3c7; color: #92400e; }
+    .pill-gray   { background: #f1f5f9; color: #64748b; }
+
+    .bar-bg { background: #e2e8f0; border-radius: 4px; height: 6px; width: 100%; }
+    .bar-fill { height: 6px; border-radius: 4px; }
+
+    .note { font-size: 11px; color: var(--muted); font-style: italic; margin-top: 8px; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="topbar-logo">🏠 Oferty mieszkań — Otodom</span>
+  <span class="muted" style="font-size:12px" id="dbInfo"></span>
+</div>
+
+<div class="tab-nav">
+  <button class="tab-btn active" onclick="showTab('offers',this)">📋 Oferty</button>
+  <button class="tab-btn"        onclick="showTab('stats',this)">📊 Statystyki</button>
+</div>
+
+<!-- ══════════════════════════════════════
+     TAB: OFERTY
+═══════════════════════════════════════ -->
+<div id="tab-offers" class="tab-content active">
+<div class="page">
+
+  <!-- KPIs -->
+  <div class="kpi-row">
+    <div class="kpi">
+      <div class="kpi-label">Łącznie ofert</div>
+      <div class="kpi-value" id="kpiTotal">—</div>
+      <div class="kpi-sub" id="kpiCities"></div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Średnia cena</div>
+      <div class="kpi-value green" id="kpiAvgPrice">—</div>
+      <div class="kpi-sub" id="kpiPriceRange"></div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Rynek pierwotny</div>
+      <div class="kpi-value" id="kpiPrimary">—</div>
+      <div class="kpi-sub" id="kpiPrimaryPct"></div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Średnia pow.</div>
+      <div class="kpi-value" id="kpiAvgArea">—</div>
+      <div class="kpi-sub" id="kpiAreaRange"></div>
+    </div>
+  </div>
+
+  <!-- Charts -->
+  <div class="chart-card" style="max-width:480px">
+    <div class="chart-title">Podział ofert wg liczby pokoi</div>
+    <div class="chart-sub" id="roomsChartSub"></div>
+    <div class="chart-wrap"><canvas id="chartRooms"></canvas></div>
+  </div>
+
+  <!-- Filters -->
+  <div class="filters-card">
+    <div class="filter-group">
+      <label class="filter-label" for="cityFilter">Miasto</label>
+      <select id="cityFilter">
+        <option value="">Wszystkie</option>
+        <option value="Gdansk">Gdańsk</option>
+        <option value="Warszawa">Warszawa</option>
+        <option value="Wroclaw">Wrocław</option>
+      </select>
+    </div>
+    <div class="divider"></div>
+    <div class="filter-group">
+      <label class="filter-label">Cena</label>
+      <input type="number" id="priceMin" placeholder="Min" step="10000">
+      <span class="sep">—</span>
+      <input type="number" id="priceMax" placeholder="Max" step="10000">
+      <span class="filter-label">zł</span>
+    </div>
+    <div class="divider"></div>
+    <div class="filter-group">
+      <label class="filter-label" for="roomsFilter">Pokoje</label>
+      <select id="roomsFilter">
+        <option value="">Wszystkie</option>
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4+</option>
+      </select>
+    </div>
+    <div class="divider"></div>
+    <div class="filter-group">
+      <label class="filter-label" for="marketFilter">Rynek</label>
+      <select id="marketFilter">
+        <option value="">Wszystkie</option>
+        <option value="pierwotny">Pierwotny</option>
+        <option value="wtórny">Wtórny</option>
+      </select>
+    </div>
+    <div class="ml-auto" style="display:flex;gap:8px">
+      <button class="btn btn-primary"   onclick="applyFilters()">Filtruj</button>
+      <button class="btn btn-secondary" onclick="resetFilters()">Reset</button>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="table-card">
+    <div class="table-header">
+      <span class="table-title">Lista ofert</span>
+      <span class="table-count" id="tableCount"></span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th class="sortable" data-col="title"     onclick="sortBy('title')">Tytuł</th>
+          <th class="sortable c" data-col="city"    onclick="sortBy('city')">Miasto</th>
+          <th class="c">Rynek</th>
+          <th>Deweloper / Właściciel</th>
+          <th>Inwestycja</th>
+          <th class="sortable r" data-col="price_pln" onclick="sortBy('price_pln')">Cena</th>
+          <th class="r muted">zł/m²</th>
+          <th class="sortable r" data-col="area_m2" onclick="sortBy('area_m2')">m²</th>
+          <th class="sortable c" data-col="rooms"   onclick="sortBy('rooms')">Pok.</th>
+          <th class="sortable c" data-col="floor"   onclick="sortBy('floor')">Piętro</th>
+          <th>Adres</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+
+</div><!-- /page offers -->
+</div><!-- /tab-offers -->
+
+
+<!-- ══════════════════════════════════════
+     TAB: STATYSTYKI
+═══════════════════════════════════════ -->
+<div id="tab-stats" class="tab-content">
+<div class="page">
+
+  <!-- Stat KPIs -->
+  <div class="stat-kpi-row">
+    <div class="kpi">
+      <div class="kpi-label">Śr. cena / m² — Gdańsk</div>
+      <div class="kpi-value green" id="skGdansk">—</div>
+      <div class="kpi-sub" id="skGdanskN"></div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Śr. cena / m² — Warszawa</div>
+      <div class="kpi-value green" id="skWarszawa">—</div>
+      <div class="kpi-sub" id="skWarszawaN"></div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Śr. cena / m² — Wrocław</div>
+      <div class="kpi-value green" id="skWroclaw">—</div>
+      <div class="kpi-sub" id="skWroclawN"></div>
+    </div>
+  </div>
+
+  <!-- Price/m² charts: city comparison + trend -->
+  <div class="charts-row">
+    <div class="chart-card">
+      <div class="chart-title">Cena za m² wg miasta i rynku</div>
+      <div class="chart-sub" id="ppmChartSub"></div>
+      <div class="chart-wrap"><canvas id="chartPpm"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header">
+        <div>
+          <div class="chart-title">Szacowany trend cen / m² — Q3 2023 – Q2 2025</div>
+          <div class="chart-sub" style="margin-top:2px">Projekcja wstecz na podstawie snapshot Q2 2025 · model wzrostu ~7%/rok</div>
+        </div>
+        <div class="chart-filter">
+          <select id="trendCityFilter" onchange="rebuildTrendChart()">
+            <option value="">Wszystkie miasta</option>
+            <option value="Gdansk">Gdańsk</option>
+            <option value="Warszawa">Warszawa</option>
+            <option value="Wroclaw">Wrocław</option>
+          </select>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="chartTrend"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Price/m² by developer -->
+  <div class="chart-card">
+    <div class="chart-header">
+      <div>
+        <div class="chart-title">Średnia cena / m² wg dewelopera / właściciela</div>
+        <div class="chart-sub" id="devChartSub" style="margin-top:2px"></div>
+      </div>
+      <div class="chart-filter">
+        <select id="devCityFilter" onchange="rebuildDevChart()">
+          <option value="">Wszystkie miasta</option>
+          <option value="Gdansk">Gdańsk</option>
+          <option value="Warszawa">Warszawa</option>
+          <option value="Wroclaw">Wrocław</option>
+        </select>
+      </div>
+    </div>
+    <div class="chart-wrap" style="height:300px"><canvas id="chartDev"></canvas></div>
+  </div>
+
+  <!-- Developer investments table -->
+  <div class="table-card">
+    <div class="table-header">
+      <div>
+        <span class="table-title">Inwestycje deweloperów — Gdańsk, Warszawa, Wrocław</span>
+        <div class="chart-sub" style="margin-top:2px" id="invTableSub"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-left:auto;align-items:center">
+        <select id="invCityFilter" onchange="rebuildInvestmentsTable()" style="border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:12px;background:var(--bg);color:var(--text);outline:none">
+          <option value="">Wszystkie miasta</option>
+          <option value="Gdansk">Gdańsk</option>
+          <option value="Warszawa">Warszawa</option>
+          <option value="Wroclaw">Wrocław</option>
+        </select>
+        <select id="invMarketFilter" onchange="rebuildInvestmentsTable()" style="border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:12px;background:var(--bg);color:var(--text);outline:none">
+          <option value="">Wszystkie statusy</option>
+          <option value="W sprzedaży">W sprzedaży</option>
+          <option value="Zakończona">Zakończona</option>
+        </select>
+      </div>
+    </div>
+    <table class="dev-table">
+      <thead>
+        <tr>
+          <th>Deweloper</th>
+          <th class="c">Miasto</th>
+          <th>Dzielnica</th>
+          <th>Inwestycja</th>
+          <th class="c">Rok</th>
+          <th class="c">Mieszkań</th>
+          <th>Cena (zakres)</th>
+          <th class="c">Status</th>
+        </tr>
+      </thead>
+      <tbody id="devTableBody"></tbody>
+    </table>
+    <p class="note" style="padding:8px 16px">* Dane statyczne (47 inwestycji) uzupełnione o aktualne oferty z Otodom — badge „X na Otodom" oznacza liczbę dopasowanych ogłoszeń ze scrapera.</p>
+  </div>
+
+</div><!-- /page stats -->
+</div><!-- /tab-stats -->
+
+
+<script>
+const ALL         = {{ offers_json | safe }};
+const INVESTMENTS = {{ investments_json | safe }};
+
+/* ── Helpers ── */
+const CITY_LABELS = { Gdansk: 'Gdańsk', Warszawa: 'Warszawa', Wroclaw: 'Wrocław' };
+const CITY_COLORS = { Gdansk: '#2563eb', Warszawa: '#d97706', Wroclaw: '#059669' };
+const CITY_DOT    = { Gdansk: 'dot-gdansk', Warszawa: 'dot-warszawa', Wroclaw: 'dot-wroclaw' };
+
+function fmtZl(n) { return n != null ? n.toLocaleString('pl-PL') + ' zł' : '—'; }
+function fmtN(n)  { return n != null ? n.toLocaleString('pl-PL') : '—'; }
+function avg(arr) { const v = arr.filter(x => x != null); return v.length ? v.reduce((a,b)=>a+b,0)/v.length : null; }
+function ppm(o)   { return (o.price_pln && o.area_m2) ? Math.round(o.price_pln / o.area_m2) : null; }
+
+/* ── Tab switching ── */
+function showTab(id, btn) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  if (btn) btn.classList.add('active');
+}
+
+/* ═══════════════════════════════
+   OFFERS TAB
+═══════════════════════════════ */
+let filtered = [...ALL];
+let sortCol  = 'price_pln';
+let sortAsc  = true;
+
+function buildOffersKPIs() {
+  const prices  = ALL.filter(o => o.price_pln).map(o => o.price_pln);
+  const areas   = ALL.filter(o => o.area_m2).map(o => o.area_m2);
+  const primary = ALL.filter(o => o.market === 'pierwotny').length;
+
+  document.getElementById('kpiTotal').textContent = ALL.length;
+  document.getElementById('kpiCities').textContent =
+    ['Gdansk','Warszawa','Wroclaw'].map(c => CITY_LABELS[c] + ' ' + ALL.filter(o=>o.city===c).length).join(' · ');
+
+  document.getElementById('kpiAvgPrice').textContent = prices.length
+    ? Math.round(avg(prices)).toLocaleString('pl-PL') + ' zł' : '—';
+  document.getElementById('kpiPriceRange').textContent = prices.length
+    ? Math.min(...prices).toLocaleString('pl-PL') + ' – ' + Math.max(...prices).toLocaleString('pl-PL') + ' zł' : '';
+
+  document.getElementById('kpiPrimary').textContent = primary;
+  document.getElementById('kpiPrimaryPct').textContent =
+    Math.round(primary / ALL.length * 100) + '% ofert';
+
+  document.getElementById('kpiAvgArea').textContent = areas.length
+    ? avg(areas).toFixed(1) + ' m²' : '—';
+  document.getElementById('kpiAreaRange').textContent = areas.length
+    ? Math.min(...areas).toFixed(1) + ' – ' + Math.max(...areas).toFixed(1) + ' m²' : '';
+
+  document.getElementById('dbInfo').textContent =
+    ALL.length + ' ofert · ' + new Date().toLocaleDateString('pl-PL');
+}
+
+function buildOffersCharts() {
+  const scrapedAt = ALL.filter(o=>o.scraped_at).map(o=>o.scraped_at).sort().pop();
+  const snapLabel = scrapedAt ? 'Snapshot: ' + scrapedAt.slice(0,10) : 'Bieżący snapshot';
+  const el = document.getElementById('roomsChartSub');
+  if (el) el.textContent = snapLabel + ' · ' + ALL.length + ' ofert';
+
+  const roomCounts = {};
+  ALL.forEach(o => { const k = o.rooms != null ? (o.rooms >= 4 ? '4+' : String(o.rooms)) : 'b.d.'; roomCounts[k] = (roomCounts[k]||0)+1; });
+  const roomLabels = ['1','2','3','4+','b.d.'].filter(k => roomCounts[k]);
+  new Chart(document.getElementById('chartRooms'), {
+    type: 'doughnut',
+    data: {
+      labels: roomLabels.map(k => k + ' pok.'),
+      datasets: [{ data: roomLabels.map(k => roomCounts[k]), backgroundColor: ['#6366f1','#2563eb','#059669','#d97706','#94a3b8'], hoverOffset: 6 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'right', labels: { font: { size: 12 }, padding: 14 } } },
+      cutout: '60%'
+    }
+  });
+}
+
+function render() {
+  const body = document.getElementById('tableBody');
+  document.getElementById('tableCount').textContent = filtered.length + ' z ' + ALL.length + ' ofert';
+
+  if (!filtered.length) {
+    body.innerHTML = `<tr><td colspan="11" class="no-results">Brak ofert spełniających kryteria</td></tr>`;
+    return;
+  }
+
+  body.innerHTML = filtered.map(o => {
+    const p2m = ppm(o);
+    const marketBadge = o.market
+      ? `<span class="badge badge-${o.market === 'pierwotny' ? 'pierwotny' : 'wtorny'}">${o.market === 'pierwotny' ? 'Pierwotny' : 'Wtórny'}</span>`
+      : '<span class="muted">—</span>';
+    const titleCell = o.url
+      ? `<a href="${o.url}" target="_blank" rel="noopener">${o.title}</a>`
+      : o.title;
+    return `<tr>
+      <td class="link-cell">${titleCell}</td>
+      <td class="c"><span class="city-dot ${CITY_DOT[o.city]||''}"></span>${CITY_LABELS[o.city]||o.city}</td>
+      <td class="c">${marketBadge}</td>
+      <td>${o.developer || '<span class="muted">—</span>'}</td>
+      <td class="muted" style="font-size:12px">${o.development || '—'}</td>
+      <td class="r price-cell">${fmtZl(o.price_pln)}</td>
+      <td class="r muted">${p2m ? fmtN(p2m) : '—'}</td>
+      <td class="r">${o.area_m2 != null ? o.area_m2.toFixed(1) : '—'}</td>
+      <td class="c">${o.rooms != null ? o.rooms : '—'}</td>
+      <td class="c">${o.floor != null ? o.floor : '—'}</td>
+      <td class="muted" style="font-size:12px">${o.address || '—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function applyFilters() {
+  const city   = document.getElementById('cityFilter').value;
+  const minP   = parseFloat(document.getElementById('priceMin').value) || 0;
+  const maxP   = parseFloat(document.getElementById('priceMax').value) || Infinity;
+  const rooms  = document.getElementById('roomsFilter').value;
+  const market = document.getElementById('marketFilter').value;
+
+  filtered = ALL.filter(o => {
+    if (city && o.city !== city) return false;
+    if (o.price_pln != null && (o.price_pln < minP || o.price_pln > maxP)) return false;
+    if (rooms) {
+      if (rooms === '4' && (o.rooms == null || o.rooms < 4)) return false;
+      if (rooms !== '4' && o.rooms !== parseInt(rooms)) return false;
+    }
+    if (market && o.market !== market) return false;
+    return true;
+  });
+  applySort(false);
+}
+
+function resetFilters() {
+  ['cityFilter','priceMin','priceMax','roomsFilter','marketFilter'].forEach(id => {
+    const el = document.getElementById(id);
+    el.value = '';
+  });
+  filtered = [...ALL];
+  applySort(false);
+}
+
+function sortBy(col) {
+  sortAsc = (sortCol === col) ? !sortAsc : true;
+  sortCol = col;
+  document.querySelectorAll('th[data-col]').forEach(th => {
+    const active = th.dataset.col === col;
+    th.classList.toggle('sort-active', active);
+    const base = th.textContent.replace(/ [↑↓]$/, '');
+    th.textContent = base + (active ? (sortAsc ? ' ↑' : ' ↓') : '');
+  });
+  applySort(false);
+}
+
+function applySort(doFilter) {
+  if (doFilter) applyFilters();
+  filtered.sort((a, b) => {
+    let va = a[sortCol], vb = b[sortCol];
+    if (va == null) va = sortAsc ? Infinity : -Infinity;
+    if (vb == null) vb = sortAsc ? Infinity : -Infinity;
+    if (typeof va === 'string') return sortAsc ? va.localeCompare(vb,'pl') : vb.localeCompare(va,'pl');
+    return sortAsc ? va - vb : vb - va;
+  });
+  render();
+}
+
+/* ═══════════════════════════════
+   STATS TAB
+═══════════════════════════════ */
+function buildStatsTab() {
+  const cities = ['Gdansk','Warszawa','Wroclaw'];
+  const scrapedAt = ALL.filter(o=>o.scraped_at).map(o=>o.scraped_at).sort().pop();
+  const snapLabel = scrapedAt ? scrapedAt.slice(0,10) : 'bieżący';
+
+  // Set descriptions
+  const ppmSub = document.getElementById('ppmChartSub');
+  if (ppmSub) ppmSub.textContent = 'Snapshot: ' + snapLabel + ' · dane z Otodom.pl · rynek pierwotny vs wtórny';
+
+  // City KPIs (price per m²)
+  cities.forEach(c => {
+    const ids = { Gdansk: 'skGdansk', Warszawa: 'skWarszawa', Wroclaw: 'skWroclaw' };
+    const idN = { Gdansk: 'skGdanskN', Warszawa: 'skWarszawaN', Wroclaw: 'skWroclawN' };
+    const offers = ALL.filter(o => o.city === c && o.price_pln && o.area_m2);
+    const avgPpm = offers.length ? avg(offers.map(ppm)) : null;
+    document.getElementById(ids[c]).textContent = avgPpm ? Math.round(avgPpm).toLocaleString('pl-PL') + ' zł/m²' : '—';
+    document.getElementById(idN[c]).textContent = offers.length + ' ofert z ceną i pow.';
+  });
+
+  // Chart: price/m² by city & market type
+  const primaryPpm = cities.map(c => {
+    const os = ALL.filter(o => o.city===c && o.market==='pierwotny' && o.price_pln && o.area_m2);
+    return os.length ? Math.round(avg(os.map(ppm))) : null;
+  });
+  const secondaryPpm = cities.map(c => {
+    const os = ALL.filter(o => o.city===c && o.market==='wtórny' && o.price_pln && o.area_m2);
+    return os.length ? Math.round(avg(os.map(ppm))) : null;
+  });
+
+  new Chart(document.getElementById('chartPpm'), {
+    type: 'bar',
+    data: {
+      labels: cities.map(c => CITY_LABELS[c]),
+      datasets: [
+        { label: 'Pierwotny', data: primaryPpm, backgroundColor: '#6366f1', borderRadius: 4 },
+        { label: 'Wtórny',    data: secondaryPpm, backgroundColor: '#94a3b8', borderRadius: 4 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top', labels: { font: { size: 12 } } },
+                 tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + (ctx.parsed.y||'').toLocaleString('pl-PL') + ' zł/m²' } } },
+      scales: {
+        x: { grid: { display: false } },
+        y: { grid: { color: 'rgba(0,0,0,.05)' }, ticks: { callback: v => (v/1000).toFixed(0) + 'k' } }
+      }
+    }
+  });
+
+  rebuildTrendChart();
+  rebuildDevChart();
+  rebuildInvestmentsTable();
+} // end buildStatsTab
+
+/* ═══════════════════════════════
+   FILTERABLE STATS CHARTS
+═══════════════════════════════ */
+let trendChart = null;
+let devChart   = null;
+const QUARTERS = ["Q3'23","Q4'23","Q1'24","Q2'24","Q3'24","Q4'24","Q1'25","Q2'25"];
+const GROWTH   = [0.78, 0.82, 0.86, 0.89, 0.92, 0.95, 0.98, 1.00];
+
+function rebuildTrendChart() {
+  const cityFilter = document.getElementById('trendCityFilter').value;
+  const cities = ['Gdansk','Warszawa','Wroclaw'];
+  const activeCities = cityFilter ? [cityFilter] : cities;
+
+  const cityAvgPpm = {};
+  cities.forEach(c => {
+    const os = ALL.filter(o => o.city===c && o.price_pln && o.area_m2);
+    cityAvgPpm[c] = os.length ? Math.round(avg(os.map(ppm))) : 0;
+  });
+
+  if (trendChart) { trendChart.destroy(); trendChart = null; }
+  trendChart = new Chart(document.getElementById('chartTrend'), {
+    type: 'line',
+    data: {
+      labels: QUARTERS,
+      datasets: activeCities.map(c => ({
+        label: CITY_LABELS[c],
+        data: GROWTH.map(g => Math.round(cityAvgPpm[c] * g)),
+        borderColor: CITY_COLORS[c],
+        backgroundColor: CITY_COLORS[c] + '18',
+        borderWidth: 2,
+        pointRadius: 3,
+        tension: 0.35,
+        fill: false,
+      }))
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'top', labels: { font: { size: 12 } } },
+        tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + ctx.parsed.y.toLocaleString('pl-PL') + ' zł/m²' } }
+      },
+      scales: {
+        x: { grid: { color: 'rgba(0,0,0,.05)' } },
+        y: { grid: { color: 'rgba(0,0,0,.05)' }, ticks: { callback: v => (v/1000).toFixed(0) + 'k' } }
+      }
+    }
+  });
+}
+
+function rebuildDevChart() {
+  const cityFilter = document.getElementById('devCityFilter').value;
+  const source = cityFilter ? ALL.filter(o => o.city === cityFilter) : ALL;
+  const scrapedAt = ALL.filter(o=>o.scraped_at).map(o=>o.scraped_at).sort().pop();
+  const snapLabel = scrapedAt ? scrapedAt.slice(0,10) : 'bieżący';
+  const subEl = document.getElementById('devChartSub');
+  if (subEl) subEl.textContent = 'Snapshot: ' + snapLabel + ' · ' + (cityFilter ? CITY_LABELS[cityFilter] : 'Gdańsk + Warszawa + Wrocław') + ' · cena za 1 m² powierzchni użytkowej';
+
+  const devMap = {};
+  source.forEach(o => {
+    if (!o.developer || !o.price_pln || !o.area_m2) return;
+    if (!devMap[o.developer]) devMap[o.developer] = { vals: [], city: o.city };
+    devMap[o.developer].vals.push(ppm(o));
+  });
+  const devEntries = Object.entries(devMap)
+    .map(([d, {vals, city}]) => ({ dev: d, avg: Math.round(avg(vals)), n: vals.length, city }))
+    .sort((a,b) => b.avg - a.avg)
+    .slice(0, 14);
+
+  // Color bars by city when no filter, accent color when filtered
+  const barColors = cityFilter
+    ? devEntries.map(() => CITY_COLORS[cityFilter] || '#6366f1')
+    : devEntries.map(d => CITY_COLORS[d.city] || '#6366f1');
+
+  if (devChart) { devChart.destroy(); devChart = null; }
+  devChart = new Chart(document.getElementById('chartDev'), {
+    type: 'bar',
+    data: {
+      labels: devEntries.map(d => d.dev),
+      datasets: [{
+        data: devEntries.map(d => d.avg),
+        backgroundColor: barColors,
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ctx.parsed.x.toLocaleString('pl-PL') + ' zł/m²' } }
+      },
+      scales: {
+        x: { grid: { color: 'rgba(0,0,0,.05)' }, ticks: { callback: v => (v/1000).toFixed(0)+'k' } },
+        y: { grid: { display: false }, ticks: { font: { size: 11 } } }
+      }
+    }
+  });
+}
+
+/* ═══════════════════════════════
+   INVESTMENTS TABLE (filterable)
+═══════════════════════════════ */
+const CITY_PILL = { Gdansk: 'pill-blue', Warszawa: 'pill-orange', Wroclaw: 'pill-green' };
+
+const OTODOM_BASE = {
+  Gdansk:   'https://www.otodom.pl/pl/wyniki/sprzedaz/mieszkanie/pomorskie/gdansk/gdansk/gdansk',
+  Warszawa: 'https://www.otodom.pl/pl/wyniki/sprzedaz/mieszkanie/mazowieckie/warszawa/warszawa/warszawa',
+  Wroclaw:  'https://www.otodom.pl/pl/wyniki/sprzedaz/mieszkanie/dolnoslaskie/wroclaw/wroclaw/wroclaw',
+};
+
+function invSearchUrl(inv) {
+  const base = OTODOM_BASE[inv.city];
+  if (!base) return null;
+  return base + '?keywords=' + encodeURIComponent(inv.investment_name);
+}
+
+function rebuildInvestmentsTable() {
+  const cityFilter   = document.getElementById('invCityFilter').value;
+  const statusFilter = document.getElementById('invMarketFilter').value; // reusing dropdown for status
+
+  // Filter investments from full DB
+  let rows = INVESTMENTS.filter(inv => {
+    if (cityFilter   && inv.city   !== cityFilter)    return false;
+    if (statusFilter && inv.status !== statusFilter)  return false;
+    return true;
+  });
+
+  // For each investment, count matching active Otodom offers
+  rows = rows.map(inv => {
+    const activeOffers = ALL.filter(o =>
+      o.city === inv.city &&
+      o.developer === inv.developer &&
+      (o.development === inv.investment_name || !o.development)
+    );
+    // Better match: same developer + same city, filter by development name if set
+    const matched = ALL.filter(o =>
+      o.city === inv.city &&
+      o.developer === inv.developer &&
+      o.development === inv.investment_name
+    );
+    return { ...inv, active_offers: matched.length };
+  });
+
+  // Sort: W sprzedaży first, then by city, then developer
+  rows.sort((a,b) => {
+    const sa = a.status === 'W sprzedaży' ? 0 : 1;
+    const sb = b.status === 'W sprzedaży' ? 0 : 1;
+    if (sa !== sb) return sa - sb;
+    if (a.city !== b.city) return a.city.localeCompare(b.city, 'pl');
+    return a.developer.localeCompare(b.developer, 'pl');
+  });
+
+  // Description
+  const sub = document.getElementById('invTableSub');
+  if (sub) {
+    const cityLabel   = cityFilter   ? CITY_LABELS[cityFilter] : 'Gdańsk + Warszawa + Wrocław';
+    const statusLabel = statusFilter || 'wszystkie statusy';
+    const wSprzedazy  = rows.filter(r => r.status === 'W sprzedaży').length;
+    const zakonczone  = rows.filter(r => r.status === 'Zakończona').length;
+    sub.textContent = cityLabel + ' · ' + statusLabel + ' · razem: ' + rows.length +
+      ' inwestycji (' + wSprzedazy + ' aktywnych, ' + zakonczone + ' zakończonych)';
+  }
+
+  if (!rows.length) {
+    document.getElementById('devTableBody').innerHTML =
+      '<tr><td colspan="8" class="no-results">Brak inwestycji spełniających kryteria</td></tr>';
+    return;
+  }
+
+  const maxTotal = Math.max(1, ...rows.map(r => r.apartments_total || 0));
+
+  document.getElementById('devTableBody').innerHTML = rows.map(inv => {
+    const statusPill = inv.status === 'W sprzedaży'
+      ? '<span class="pill pill-blue">🔨 W sprzedaży</span>'
+      : '<span class="pill pill-gray">✅ Zakończona</span>';
+    const cityPill = `<span class="pill ${CITY_PILL[inv.city]||'pill-gray'}">${CITY_LABELS[inv.city]||inv.city}</span>`;
+    const barPct  = Math.round((inv.apartments_total || 0) / maxTotal * 100);
+    const barColor = inv.status === 'W sprzedaży' ? '#6366f1' : '#94a3b8';
+    const priceRange = (inv.price_min && inv.price_max)
+      ? inv.price_min.toLocaleString('pl-PL') + ' – ' + inv.price_max.toLocaleString('pl-PL') + ' zł'
+      : '—';
+    const activeBadge = inv.active_offers > 0
+      ? `<span class="pill pill-green" title="Aktualne oferty na Otodom">${inv.active_offers} na Otodom</span>`
+      : '';
+    const searchUrl = invSearchUrl(inv);
+    const invLink = searchUrl
+      ? `<a href="${searchUrl}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-weight:600">${inv.investment_name}</a>`
+      : `<strong>${inv.investment_name}</strong>`;
+
+    return `<tr>
+      <td><strong>${inv.developer}</strong></td>
+      <td class="c">${cityPill}</td>
+      <td class="muted" style="font-size:12px">${inv.district || '—'}</td>
+      <td>${invLink} ${activeBadge}</td>
+      <td class="c">${inv.completion_year || '—'}</td>
+      <td class="c">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span>${inv.apartments_total ? inv.apartments_total.toLocaleString('pl-PL') : '—'}</span>
+          <div class="bar-bg" style="width:50px"><div class="bar-fill" style="width:${barPct}%;background:${barColor}"></div></div>
+        </div>
+      </td>
+      <td style="font-size:12px">${priceRange}</td>
+      <td class="c">${statusPill}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ── Init ── */
+buildOffersKPIs();
+buildOffersCharts();
+applySort(false);
+buildStatsTab();
+</script>
+</body>
+</html>
