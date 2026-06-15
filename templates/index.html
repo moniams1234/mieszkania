@@ -126,6 +126,15 @@
     .bar-fill { height: 6px; border-radius: 4px; }
 
     .note { font-size: 11px; color: var(--muted); font-style: italic; margin-top: 8px; }
+
+    /* ── Scraper panel ── */
+    .scrape-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+    .scrape-checks { display: flex; gap: 14px; align-items: center; }
+    .scrape-checks label { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; user-select: none; }
+    .scrape-checks input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+    .status-banner { border-radius: 10px; padding: 10px 16px; font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 8px; }
+    .status-ok    { background: #d1fae5; border: 1px solid #6ee7b7; color: #065f46; }
+    .status-error { background: #fee2e2; border: 1px solid #fca5a5; color: #991b1b; }
   </style>
 </head>
 <body>
@@ -176,6 +185,23 @@
     <div class="chart-sub" id="roomsChartSub"></div>
     <div class="chart-wrap"><canvas id="chartRooms"></canvas></div>
   </div>
+
+  <!-- Scraper panel -->
+  <form id="scrapeForm" method="POST" action="/scrape" class="scrape-panel">
+    <span class="filter-label">Pobierz oferty z Otodom</span>
+    <div class="scrape-checks">
+      <label><input type="checkbox" name="cities" value="Gdansk" checked> Gdańsk (pomorskie)</label>
+      <label><input type="checkbox" name="cities" value="Warszawa" checked> Warszawa (mazowieckie)</label>
+      <label><input type="checkbox" name="cities" value="Wroclaw" checked> Wrocław (dolnośląskie)</label>
+    </div>
+    <button type="submit" id="scrapeBtn" class="btn btn-primary" style="margin-left:auto">Odśwież oferty</button>
+  </form>
+
+  {% if status %}
+  <div id="statusBanner" class="status-banner {% if 'błąd' in status %}status-error{% else %}status-ok{% endif %}">
+    {% if 'błąd' in status %}✗{% else %}✓{% endif %} {{ status }}
+  </div>
+  {% endif %}
 
   <!-- Filters -->
   <div class="filters-card">
@@ -793,6 +819,22 @@ function rebuildInvestmentsTable() {
     </tr>`;
   }).join('');
 }
+
+/* ── Scraper form ── */
+document.getElementById('scrapeForm').addEventListener('submit', function(e) {
+  const checked = this.querySelectorAll('input[type=checkbox]:checked');
+  if (!checked.length) {
+    e.preventDefault();
+    alert('Wybierz co najmniej jedno województwo');
+    return;
+  }
+  const btn = document.getElementById('scrapeBtn');
+  btn.textContent = 'Pobieranie...';
+  btn.disabled = true;
+});
+
+const statusBanner = document.getElementById('statusBanner');
+if (statusBanner) setTimeout(() => statusBanner.style.display = 'none', 6000);
 
 /* ── Init ── */
 buildOffersKPIs();
