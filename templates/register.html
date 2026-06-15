@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rejestracja — Oferty mieszkań</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #03080f; --surface: #070f1c; --surface2: #0c1829;
+      --border: rgba(255,255,255,.07); --border-gold: rgba(201,168,76,.2);
+      --text: #edf2ff; --muted: #4a6888; --accent: #c9a84c;
+    }
+    body {
+      font-family: 'Inter', sans-serif; font-size: 14px;
+      background: var(--bg); color: var(--text); min-height: 100vh;
+      display: flex; flex-direction: column;
+      background-image: radial-gradient(ellipse 120% 45% at 50% 0%, rgba(59,130,246,.06) 0%, transparent 65%);
+    }
+    .topbar {
+      background: rgba(3,8,15,.88); backdrop-filter: blur(24px) saturate(180%);
+      border-bottom: 1px solid rgba(201,168,76,.12);
+      height: 62px; padding: 0 32px; display: flex; align-items: center;
+      box-shadow: 0 1px 0 rgba(201,168,76,.08), 0 4px 24px rgba(0,0,0,.6);
+    }
+    .topbar-logo {
+      font-size: 17px; font-weight: 700; letter-spacing: -.02em;
+      background: linear-gradient(90deg, #d4af60 0%, #f0d590 50%, #b8922a 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      text-decoration: none;
+    }
+    .auth-wrap {
+      flex: 1; display: flex; align-items: center; justify-content: center; padding: 48px 16px;
+    }
+    .auth-card {
+      background: var(--surface); border: 1px solid var(--border-gold);
+      border-radius: 20px; padding: 40px 36px; width: 100%; max-width: 400px;
+      position: relative; overflow: hidden;
+    }
+    .auth-card::before {
+      content: ''; position: absolute; top: 0; left: 15%; right: 15%; height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(201,168,76,.55), transparent);
+    }
+    .auth-title { font-size: 22px; font-weight: 700; letter-spacing: -.02em; margin-bottom: 6px; }
+    .auth-sub   { font-size: 13px; color: var(--muted); margin-bottom: 28px; }
+    .field { margin-bottom: 16px; }
+    .field label {
+      display: block; font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .09em; color: var(--muted); margin-bottom: 6px;
+    }
+    .field input {
+      width: 100%; border: 1px solid var(--border); border-radius: 10px;
+      padding: 10px 14px; font-size: 14px; color: var(--text); background: var(--surface2);
+      outline: none; font-family: inherit; transition: border-color .2s, box-shadow .2s;
+    }
+    .field input:focus { border-color: rgba(201,168,76,.45); box-shadow: 0 0 0 3px rgba(201,168,76,.07); }
+    .btn-auth {
+      width: 100%; padding: 12px; border: none; border-radius: 10px; margin-top: 8px;
+      font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer;
+      background: linear-gradient(135deg, #a07828, #c9a84c, #a07828); color: #0a0600;
+      box-shadow: 0 2px 14px rgba(201,168,76,.3); background-size: 200% 100%;
+      transition: background-position .3s, box-shadow .15s;
+    }
+    .btn-auth:hover { background-position: right center; box-shadow: 0 4px 20px rgba(201,168,76,.45); }
+    .auth-error {
+      background: rgba(248,113,113,.08); border: 1px solid rgba(248,113,113,.2);
+      color: #fca5a5; border-radius: 10px; padding: 10px 14px; font-size: 13px; margin-bottom: 16px;
+    }
+    .auth-link { text-align: center; margin-top: 20px; font-size: 13px; color: var(--muted); }
+    .auth-link a { color: var(--accent); text-decoration: none; font-weight: 500; }
+    .auth-link a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+<div class="topbar">
+  <a href="/" class="topbar-logo">🏠 Oferty mieszkań — Otodom</a>
+</div>
+<div class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-title">Rejestracja</div>
+    <div class="auth-sub">Utwórz nowe konto, aby zapisywać ulubione oferty</div>
+
+    {% if error %}
+    <div class="auth-error">{{ error }}</div>
+    {% endif %}
+
+    <form method="POST" action="/register">
+      <div class="field">
+        <label for="login">Login</label>
+        <input type="text" id="login" name="login" placeholder="Wybierz login (min. 3 znaki)"
+               autocomplete="username" required autofocus minlength="3">
+      </div>
+      <div class="field">
+        <label for="password">Hasło</label>
+        <input type="password" id="password" name="password" placeholder="Minimum 4 znaki"
+               autocomplete="new-password" required minlength="4">
+      </div>
+      <div class="field">
+        <label for="password2">Powtórz hasło</label>
+        <input type="password" id="password2" name="password2" placeholder="Powtórz hasło"
+               autocomplete="new-password" required>
+      </div>
+      <button type="submit" class="btn-auth">Utwórz konto</button>
+    </form>
+
+    <div class="auth-link">Masz już konto? <a href="/login">Zaloguj się</a></div>
+  </div>
+</div>
+</body>
+</html>

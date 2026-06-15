@@ -178,6 +178,20 @@
     .status-banner { border-radius: 12px; padding: 10px 16px; font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 8px; }
     .status-ok    { background: rgba(34,211,165,.08); border: 1px solid rgba(34,211,165,.2); color: #6ee7b7; }
     .status-error { background: rgba(248,113,113,.08); border: 1px solid rgba(248,113,113,.2); color: #fca5a5; }
+
+    /* ── Heart / Favorites ── */
+    .heart-btn { background: none; border: none; cursor: pointer; font-size: 15px; color: var(--muted); transition: color .15s, transform .15s; padding: 2px 6px; border-radius: 4px; line-height: 1; }
+    .heart-btn:hover { color: var(--negative); transform: scale(1.2); }
+    .heart-btn.fav  { color: var(--negative); text-shadow: 0 0 8px rgba(248,113,113,.4); }
+
+    /* ── Auth in topbar ── */
+    .topbar-auth { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+    .topbar-user { font-size: 12px; color: var(--muted); }
+    .btn-topbar { border-radius: 8px; padding: 5px 14px; font-size: 12px; font-weight: 600; font-family: inherit; cursor: pointer; text-decoration: none; display: inline-block; transition: all .15s; border: none; }
+    .btn-topbar-secondary { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+    .btn-topbar-secondary:hover { color: var(--text); }
+    .btn-topbar-primary { background: linear-gradient(135deg, #a07828, #c9a84c, #a07828); color: #0a0600; box-shadow: 0 2px 10px rgba(201,168,76,.25); background-size: 200%; }
+    .btn-topbar-primary:hover { background-position: right center; }
   </style>
 </head>
 <body>
@@ -185,11 +199,23 @@
 <div class="topbar">
   <span class="topbar-logo">🏠 Oferty mieszkań — Otodom</span>
   <span class="muted" style="font-size:12px" id="dbInfo"></span>
+  <div class="topbar-auth">
+    {% if username %}
+      <span class="topbar-user">{{ username }}</span>
+      <a href="/logout" class="btn-topbar btn-topbar-secondary">Wyloguj</a>
+    {% else %}
+      <a href="/login"    class="btn-topbar btn-topbar-secondary">Zaloguj się</a>
+      <a href="/register" class="btn-topbar btn-topbar-primary">Rejestracja</a>
+    {% endif %}
+  </div>
 </div>
 
 <div class="tab-nav">
   <button class="tab-btn active" onclick="showTab('offers',this)">📋 Oferty</button>
   <button class="tab-btn"        onclick="showTab('stats',this)">📊 Statystyki</button>
+  {% if username %}
+  <button class="tab-btn"        onclick="showTab('favorites',this)">♥ Ulubione<span id="favTabBadge"></span></button>
+  {% endif %}
 </div>
 
 <!-- ══════════════════════════════════════
@@ -300,6 +326,7 @@
     <table>
       <thead>
         <tr>
+          <th class="c" style="width:38px"></th>
           <th class="sortable" data-col="title"     onclick="sortBy('title')">Tytuł</th>
           <th class="sortable c" data-col="city"    onclick="sortBy('city')">Miasto</th>
           <th class="c">Rynek</th>
@@ -434,9 +461,47 @@
 </div><!-- /tab-stats -->
 
 
+<!-- ══════════════════════════════════════
+     TAB: ULUBIONE
+═══════════════════════════════════════ -->
+<div id="tab-favorites" class="tab-content">
+<div class="page">
+
+  <div class="table-card">
+    <div class="table-header">
+      <span class="table-title">♥ Ulubione oferty</span>
+      <span class="table-count" id="favCount"></span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th class="c" style="width:38px"></th>
+          <th>Tytuł</th>
+          <th class="c">Miasto</th>
+          <th class="c">Rynek</th>
+          <th>Deweloper / Właściciel</th>
+          <th>Inwestycja</th>
+          <th class="r">Cena</th>
+          <th class="r muted">zł/m²</th>
+          <th class="r">m²</th>
+          <th class="c">Pok.</th>
+          <th class="c">Piętro</th>
+          <th>Adres</th>
+        </tr>
+      </thead>
+      <tbody id="favTableBody"></tbody>
+    </table>
+  </div>
+
+</div><!-- /page favorites -->
+</div><!-- /tab-favorites -->
+
+
 <script>
 const ALL         = {{ offers_json | safe }};
 const INVESTMENTS = {{ investments_json | safe }};
+const FAVORITE_IDS = new Set({{ favorite_ids | safe }});
+const LOGGED_IN    = {{ 'true' if username else 'false' }};
 
 Chart.defaults.color      = '#4a6888';
 Chart.defaults.borderColor = 'rgba(255,255,255,.05)';
@@ -458,6 +523,7 @@ function showTab(id, btn) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + id).classList.add('active');
   if (btn) btn.classList.add('active');
+  if (id === 'favorites') renderFavorites();
 }
 
 /* ═══════════════════════════════
@@ -517,37 +583,40 @@ function buildOffersCharts() {
   });
 }
 
+function renderRow(o) {
+  const p2m = ppm(o);
+  const marketBadge = o.market
+    ? `<span class="badge badge-${o.market === 'pierwotny' ? 'pierwotny' : 'wtorny'}">${o.market === 'pierwotny' ? 'Pierwotny' : 'Wtórny'}</span>`
+    : '<span class="muted">—</span>';
+  const titleCell = o.url
+    ? `<a href="${o.url}" target="_blank" rel="noopener">${o.title}</a>`
+    : o.title;
+  const isFav = FAVORITE_IDS.has(o.id);
+  const heartBtn = `<button class="heart-btn${isFav ? ' fav' : ''}" onclick="toggleFavorite(${o.id}, this)" title="${isFav ? 'Usuń z ulubionych' : 'Dodaj do ulubionych'}">♥</button>`;
+  return `<tr>
+    <td class="c">${heartBtn}</td>
+    <td class="link-cell">${titleCell}</td>
+    <td class="c"><span class="city-dot ${CITY_DOT[o.city]||''}"></span>${CITY_LABELS[o.city]||o.city}</td>
+    <td class="c">${marketBadge}</td>
+    <td>${o.developer || '<span class="muted">—</span>'}</td>
+    <td class="muted" style="font-size:12px">${o.development || '—'}</td>
+    <td class="r price-cell">${fmtZl(o.price_pln)}</td>
+    <td class="r muted">${p2m ? fmtN(p2m) : '—'}</td>
+    <td class="r">${o.area_m2 != null ? o.area_m2.toFixed(1) : '—'}</td>
+    <td class="c">${o.rooms != null ? o.rooms : '—'}</td>
+    <td class="c">${o.floor != null ? o.floor : '—'}</td>
+    <td class="muted" style="font-size:12px">${o.address || '—'}</td>
+  </tr>`;
+}
+
 function render() {
   const body = document.getElementById('tableBody');
   document.getElementById('tableCount').textContent = filtered.length + ' z ' + ALL.length + ' ofert';
-
   if (!filtered.length) {
-    body.innerHTML = `<tr><td colspan="11" class="no-results">Brak ofert spełniających kryteria</td></tr>`;
+    body.innerHTML = `<tr><td colspan="12" class="no-results">Brak ofert spełniających kryteria</td></tr>`;
     return;
   }
-
-  body.innerHTML = filtered.map(o => {
-    const p2m = ppm(o);
-    const marketBadge = o.market
-      ? `<span class="badge badge-${o.market === 'pierwotny' ? 'pierwotny' : 'wtorny'}">${o.market === 'pierwotny' ? 'Pierwotny' : 'Wtórny'}</span>`
-      : '<span class="muted">—</span>';
-    const titleCell = o.url
-      ? `<a href="${o.url}" target="_blank" rel="noopener">${o.title}</a>`
-      : o.title;
-    return `<tr>
-      <td class="link-cell">${titleCell}</td>
-      <td class="c"><span class="city-dot ${CITY_DOT[o.city]||''}"></span>${CITY_LABELS[o.city]||o.city}</td>
-      <td class="c">${marketBadge}</td>
-      <td>${o.developer || '<span class="muted">—</span>'}</td>
-      <td class="muted" style="font-size:12px">${o.development || '—'}</td>
-      <td class="r price-cell">${fmtZl(o.price_pln)}</td>
-      <td class="r muted">${p2m ? fmtN(p2m) : '—'}</td>
-      <td class="r">${o.area_m2 != null ? o.area_m2.toFixed(1) : '—'}</td>
-      <td class="c">${o.rooms != null ? o.rooms : '—'}</td>
-      <td class="c">${o.floor != null ? o.floor : '—'}</td>
-      <td class="muted" style="font-size:12px">${o.address || '—'}</td>
-    </tr>`;
-  }).join('');
+  body.innerHTML = filtered.map(renderRow).join('');
 }
 
 function applyFilters() {
@@ -867,6 +936,47 @@ function rebuildInvestmentsTable() {
   }).join('');
 }
 
+/* ── Favorites ── */
+async function toggleFavorite(offerId, btn) {
+  if (!LOGGED_IN) { window.location.href = '/login'; return; }
+  const isFav = FAVORITE_IDS.has(offerId);
+  const url = isFav ? '/favorites/remove' : '/favorites/add';
+  try {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({offer_id: offerId})
+    });
+    if (!resp.ok) return;
+    if (isFav) { FAVORITE_IDS.delete(offerId); } else { FAVORITE_IDS.add(offerId); }
+    // update all heart buttons for this offer (main table + favorites table)
+    document.querySelectorAll(`.heart-btn[onclick*="toggleFavorite(${offerId},"]`).forEach(b => {
+      b.classList.toggle('fav', !isFav);
+      b.title = !isFav ? 'Usuń z ulubionych' : 'Dodaj do ulubionych';
+    });
+    updateFavCount();
+    if (document.getElementById('tab-favorites').classList.contains('active')) renderFavorites();
+  } catch(e) {}
+}
+
+function updateFavCount() {
+  const n = FAVORITE_IDS.size;
+  const badge = document.getElementById('favTabBadge');
+  if (badge) badge.textContent = n > 0 ? ' (' + n + ')' : '';
+}
+
+function renderFavorites() {
+  const favOffers = ALL.filter(o => FAVORITE_IDS.has(o.id));
+  const body  = document.getElementById('favTableBody');
+  const count = document.getElementById('favCount');
+  if (count) count.textContent = favOffers.length + ' ofert';
+  if (!favOffers.length) {
+    body.innerHTML = `<tr><td colspan="12" class="no-results">Brak ulubionych ofert. Kliknij ♥ przy wybranej ofercie, aby ją zapisać.</td></tr>`;
+    return;
+  }
+  body.innerHTML = favOffers.map(renderRow).join('');
+}
+
 /* ── Scraper form ── */
 document.getElementById('scrapeForm').addEventListener('submit', function(e) {
   const checked = this.querySelectorAll('input[type=checkbox]:checked');
@@ -888,6 +998,7 @@ buildOffersKPIs();
 buildOffersCharts();
 applySort(false);
 buildStatsTab();
+updateFavCount();
 </script>
 </body>
 </html>
