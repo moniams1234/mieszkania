@@ -103,11 +103,11 @@ async def cmd_wszystkie(interaction: discord.Interaction):
 @client.event
 async def on_ready():
     await tree.sync()
-    print(f'✅ Bot {client.user} gotowy')
-    print('   Komendy: /gdansk  /warszawa  /wroclaw  /wszystkie')
+    print(f'[OK] Bot {client.user} gotowy')
+    print('     Komendy: /gdansk  /warszawa  /wroclaw  /wszystkie')
 
 
 if not BOT_TOKEN:
-    print('❌ Brak DISCORD_BOT_TOKEN w pliku .env')
+    print('[BLAD] Brak DISCORD_BOT_TOKEN w pliku .env')
 else:
     client.run(BOT_TOKEN)
