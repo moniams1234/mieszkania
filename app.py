@@ -40,46 +40,47 @@ def get_investments():
     return [dict(r) for r in rows]
 
 
+CITY_COLORS = {'Gdansk': 0x2563eb, 'Warszawa': 0xd97706, 'Wroclaw': 0x059669}
+CITY_LABELS = {'Gdansk': 'Gdańsk', 'Warszawa': 'Warszawa', 'Wroclaw': 'Wrocław'}
+
 def send_discord_notification(all_rows, city_counts):
     webhook_url = os.getenv('DISCORD_WEBHOOK_URL')
     if not webhook_url:
         return
 
-    prices = [r['price_pln'] for r in all_rows if r.get('price_pln')]
-    areas  = [r['area_m2']   for r in all_rows if r.get('area_m2')]
-    primary = sum(1 for r in all_rows if r.get('market') == 'pierwotny')
-
-    avg_price  = int(sum(prices) / len(prices)) if prices else None
-    min_price  = min(prices) if prices else None
-    max_price  = max(prices) if prices else None
-    avg_area   = sum(areas) / len(areas) if areas else None
-    total      = len(all_rows)
-
-    city_line = ' | '.join(f'{city}: {n}' for city, n in city_counts)
-    pct = round(primary / total * 100) if total else 0
-
     def fmt(n): return f'{n:,}'.replace(',', ' ') + ' zł' if n else '—'
 
-    fields = [
-        {'name': 'Pobrane oferty', 'value': f'📍 {city_line}', 'inline': False},
-        {'name': 'Średnia cena',   'value': fmt(avg_price),    'inline': True},
-        {'name': 'Zakres cen',     'value': f'{fmt(min_price)} – {fmt(max_price)}', 'inline': True},
-        {'name': 'Rynek pierwotny','value': f'{primary} ofert ({pct}%)',            'inline': True},
-        {'name': 'Śr. powierzchnia','value': f'{avg_area:.1f} m²' if avg_area else '—', 'inline': True},
-    ]
+    for city, count in city_counts:
+        rows = [r for r in all_rows if r.get('city') == city]
+        prices  = [r['price_pln'] for r in rows if r.get('price_pln')]
+        areas   = [r['area_m2']   for r in rows if r.get('area_m2')]
+        primary = sum(1 for r in rows if r.get('market') == 'pierwotny')
+        pct     = round(primary / count * 100) if count else 0
 
-    payload = {
-        'embeds': [{
-            'title': f'🏠 Nowe oferty z Otodom — pobrano {total} ofert',
-            'color': 0x2563eb,
-            'fields': fields,
-            'footer': {'text': 'Otodom scraper'},
-        }]
-    }
-    try:
-        http.post(webhook_url, json=payload, timeout=10)
-    except Exception:
-        pass
+        avg_price = int(sum(prices) / len(prices)) if prices else None
+        min_price = min(prices) if prices else None
+        max_price = max(prices) if prices else None
+        avg_area  = sum(areas) / len(areas) if areas else None
+
+        fields = [
+            {'name': 'Średnia cena',    'value': fmt(avg_price),  'inline': True},
+            {'name': 'Zakres cen',      'value': f'{fmt(min_price)} – {fmt(max_price)}', 'inline': True},
+            {'name': 'Rynek pierwotny', 'value': f'{primary} ofert ({pct}%)', 'inline': True},
+            {'name': 'Śr. powierzchnia','value': f'{avg_area:.1f} m²' if avg_area else '—', 'inline': True},
+        ]
+
+        payload = {
+            'embeds': [{
+                'title': f'🏠 {CITY_LABELS.get(city, city)} — pobrano {count} ofert',
+                'color': CITY_COLORS.get(city, 0x2563eb),
+                'fields': fields,
+                'footer': {'text': 'Otodom scraper'},
+            }]
+        }
+        try:
+            http.post(webhook_url, json=payload, timeout=10)
+        except Exception:
+            pass
 
 
 @app.route('/')
