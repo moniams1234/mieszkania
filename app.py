@@ -2,7 +2,11 @@ import sqlite3
 import json
 import os
 from flask import Flask, render_template, request, redirect, url_for
+import requests as http
+from dotenv import load_dotenv
 import scraper as sc
+
+load_dotenv()
 
 app = Flask(__name__)
 DB_PATH = os.path.join(os.path.dirname(__file__), 'offers.db')
@@ -36,6 +40,48 @@ def get_investments():
     return [dict(r) for r in rows]
 
 
+def send_discord_notification(all_rows, city_counts):
+    webhook_url = os.getenv('DISCORD_WEBHOOK_URL')
+    if not webhook_url:
+        return
+
+    prices = [r['price_pln'] for r in all_rows if r.get('price_pln')]
+    areas  = [r['area_m2']   for r in all_rows if r.get('area_m2')]
+    primary = sum(1 for r in all_rows if r.get('market') == 'pierwotny')
+
+    avg_price  = int(sum(prices) / len(prices)) if prices else None
+    min_price  = min(prices) if prices else None
+    max_price  = max(prices) if prices else None
+    avg_area   = sum(areas) / len(areas) if areas else None
+    total      = len(all_rows)
+
+    city_line = ' | '.join(f'{city}: {n}' for city, n in city_counts)
+    pct = round(primary / total * 100) if total else 0
+
+    def fmt(n): return f'{n:,}'.replace(',', ' ') + ' zł' if n else '—'
+
+    fields = [
+        {'name': 'Pobrane oferty', 'value': f'📍 {city_line}', 'inline': False},
+        {'name': 'Średnia cena',   'value': fmt(avg_price),    'inline': True},
+        {'name': 'Zakres cen',     'value': f'{fmt(min_price)} – {fmt(max_price)}', 'inline': True},
+        {'name': 'Rynek pierwotny','value': f'{primary} ofert ({pct}%)',            'inline': True},
+        {'name': 'Śr. powierzchnia','value': f'{avg_area:.1f} m²' if avg_area else '—', 'inline': True},
+    ]
+
+    payload = {
+        'embeds': [{
+            'title': f'🏠 Nowe oferty z Otodom — pobrano {total} ofert',
+            'color': 0x2563eb,
+            'fields': fields,
+            'footer': {'text': 'Otodom scraper'},
+        }]
+    }
+    try:
+        http.post(webhook_url, json=payload, timeout=10)
+    except Exception:
+        pass
+
+
 @app.route('/')
 def index():
     offers      = get_offers()
@@ -57,8 +103,9 @@ def scrape():
     conn = sqlite3.connect(db_path)
     sc.init_db(conn)
 
-    parts = []
-    total = 0
+    parts     = []
+    all_rows  = []
+    city_counts = []
     for city in cities:
         url = url_map.get(city)
         if not url:
@@ -67,13 +114,18 @@ def scrape():
             rows = sc.fetch_items(city, url)
             sc.save_rows(conn, rows)
             parts.append(f'{city} ({len(rows)})')
-            total += len(rows)
+            all_rows.extend(rows)
+            city_counts.append((city, len(rows)))
         except Exception:
             parts.append(f'{city} (błąd)')
 
     conn.close()
+
+    if all_rows:
+        send_discord_notification(all_rows, city_counts)
+
     if parts:
-        status = f'Pobrano {total} ofert: ' + ', '.join(parts)
+        status = f'Pobrano {len(all_rows)} ofert: ' + ', '.join(parts)
     else:
         status = 'Nie wybrano żadnego miasta'
     return redirect(url_for('index', status=status))
