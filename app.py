@@ -1,6 +1,9 @@
 import sqlite3
 import json
 import os
+import asyncio
+import threading
+import time as _time
 from datetime import datetime
 from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
@@ -8,6 +11,7 @@ import requests as http
 from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash, check_password_hash
 import scraper as sc
+import history_scraper as hs
 
 load_dotenv()
 
@@ -25,7 +29,8 @@ def get_offers():
     conn.row_factory = sqlite3.Row
     rows = conn.execute(
         'SELECT id, city, title, price_pln, area_m2, rooms, floor, address, url, '
-        'developer, market, development, district, scraped_at FROM offers ORDER BY id'
+        'developer, market, development, district, scraped_at, first_scraped_at '
+        'FROM offers ORDER BY id'
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
@@ -70,6 +75,7 @@ def init_users_db():
 
 
 CITY_COLORS = {'Gdansk': 0x2563eb, 'Warszawa': 0xd97706, 'Wroclaw': 0x059669}
+_history_job = {'running': False, 'done': 0, 'total': 0, 'error': None}
 CITY_LABELS = {'Gdansk': 'Gdańsk', 'Warszawa': 'Warszawa', 'Wroclaw': 'Wrocław'}
 
 
@@ -256,7 +262,73 @@ def scrape():
     return redirect(url_for('index', status=status))
 
 
+def _auto_scrape_task():
+    while True:
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            sc.init_db(conn)
+            all_rows, city_counts = [], []
+            for city, url in sc.URLS:
+                try:
+                    rows = sc.fetch_items(city, url)
+                    sc.save_rows(conn, rows)
+                    all_rows.extend(rows)
+                    city_counts.append((city, len(rows)))
+                except Exception:
+                    pass
+            conn.close()
+            if all_rows:
+                send_discord_notification(all_rows, city_counts)
+        except Exception:
+            pass
+        _time.sleep(15 * 60)
+
+
+@app.route('/history/fetch', methods=['POST'])
+def history_fetch():
+    email    = os.getenv('OTODOM_EMAIL')
+    password = os.getenv('OTODOM_PASSWORD')
+    if not email or not password:
+        return jsonify({'ok': False, 'error': 'Brak OTODOM_EMAIL lub OTODOM_PASSWORD w pliku .env'}), 400
+    if _history_job['running']:
+        return jsonify({'ok': False, 'error': 'Pobieranie już trwa'}), 409
+
+    offers = [o for o in get_offers() if o.get('url')]
+
+    def _run():
+        asyncio.run(hs.run(offers, get_db_path(), email, password, _history_job))
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({'ok': True, 'total': len(offers)})
+
+
+@app.route('/history/status')
+def history_status():
+    return jsonify(_history_job)
+
+
+@app.route('/history/<int:offer_id>')
+def history_data(offer_id):
+    conn = sqlite3.connect(get_db_path())
+    conn.row_factory = sqlite3.Row
+    hs.init_history_db(conn)
+    row = conn.execute(
+        'SELECT * FROM offer_history WHERE offer_id = ?', (offer_id,)
+    ).fetchone()
+    conn.close()
+    if not row:
+        return jsonify(None)
+    d = dict(row)
+    if d.get('price_history'):
+        d['price_history'] = json.loads(d['price_history'])
+    return jsonify(d)
+
+
 init_users_db()
+
+# Start background scraper only in the actual worker process (not Werkzeug reloader parent)
+if not app.debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
+    threading.Thread(target=_auto_scrape_task, daemon=True).start()
 
 if __name__ == '__main__':
     app.run(debug=True)
