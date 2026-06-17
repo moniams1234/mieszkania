@@ -19,8 +19,17 @@ app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'otodom-scraper-dev-secret')
 DB_PATH = os.path.join(os.path.dirname(__file__), 'offers.db')
 
+_IS_VERCEL = bool(os.environ.get('VERCEL'))
+_VERCEL_DB = '/tmp/offers.db'
+
 
 def get_db_path():
+    if _IS_VERCEL:
+        # Vercel filesystem is read-only except /tmp; copy bundled DB on first use
+        if not os.path.exists(_VERCEL_DB) and os.path.exists(DB_PATH):
+            import shutil
+            shutil.copy2(DB_PATH, _VERCEL_DB)
+        return _VERCEL_DB
     return app.config.get('DB_PATH', DB_PATH)
 
 
@@ -326,8 +335,8 @@ def history_data(offer_id):
 
 init_users_db()
 
-# Start background scraper only in the actual worker process (not Werkzeug reloader parent)
-if not app.debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
+# Start background scraper only locally (Vercel serverless can't run persistent threads)
+if not _IS_VERCEL and (not app.debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true'):
     threading.Thread(target=_auto_scrape_task, daemon=True).start()
 
 if __name__ == '__main__':
