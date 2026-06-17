@@ -523,6 +523,13 @@
 </div><!-- /page favorites -->
 </div><!-- /tab-favorites -->
 
+<div id="historyModal" class="history-modal-overlay">
+  <div class="history-modal-box">
+    <button class="history-modal-close" onclick="closeHistoryModal()">✕</button>
+    <h3 id="historyModalTitle" style="font-size:15px;font-weight:700;margin-bottom:20px;color:var(--text);padding-right:32px"></h3>
+    <div id="historyModalContent"></div>
+  </div>
+</div>
 
 <script>
 const ALL         = {{ offers_json | safe }};
@@ -1063,8 +1070,15 @@ function pollHistoryStatus() {
       const btn = document.getElementById('historyBtn');
       btn.disabled = false;
       btn.textContent = '📈 Pobierz historię';
+      document.getElementById('historyProgress').style.display = 'none';
       if (d.error) alert('Błąd Playwright: ' + d.error);
     }
+  }).catch(() => {
+    clearInterval(_historyPollInterval);
+    const btn = document.getElementById('historyBtn');
+    btn.disabled = false;
+    btn.textContent = '📈 Pobierz historię';
+    document.getElementById('historyProgress').style.display = 'none';
   });
 }
 
@@ -1074,7 +1088,14 @@ async function showHistory(offerId, title) {
     '<p style="color:var(--muted);text-align:center;padding:24px 0">Ładowanie...</p>';
   document.getElementById('historyModal').classList.add('open');
 
-  const d = await fetch('/history/' + offerId).then(r => r.json());
+  let d;
+  try {
+    d = await fetch('/history/' + offerId).then(r => r.json());
+  } catch (e) {
+    document.getElementById('historyModalContent').innerHTML =
+      '<p style="color:var(--muted)">Błąd połączenia z serwerem.</p>';
+    return;
+  }
 
   if (!d) {
     document.getElementById('historyModalContent').innerHTML =
@@ -1163,12 +1184,5 @@ applySort(false);
 buildStatsTab();
 updateFavCount();
 </script>
-<div id="historyModal" class="history-modal-overlay">
-  <div class="history-modal-box">
-    <button class="history-modal-close" onclick="closeHistoryModal()">✕</button>
-    <h3 id="historyModalTitle" style="font-size:15px;font-weight:700;margin-bottom:20px;color:var(--text);padding-right:32px"></h3>
-    <div id="historyModalContent"></div>
-  </div>
-</div>
 </body>
 </html>
