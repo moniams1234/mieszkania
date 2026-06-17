@@ -1057,6 +1057,7 @@ function startHistoryFetch() {
     .catch(() => {
       btn.disabled = false;
       btn.textContent = '📈 Pobierz historię';
+      document.getElementById('historyProgress').style.display = 'none';
     });
 }
 
