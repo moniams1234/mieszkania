@@ -62,6 +62,7 @@ def get_investments():
 
 def init_users_db():
     conn = sqlite3.connect(get_db_path())
+    sc.init_db(conn)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id            INTEGER PRIMARY KEY AUTOINCREMENT,
