@@ -34,24 +34,27 @@ FLOOR_MAP = {
 def init_db(conn):
     conn.execute("""
         CREATE TABLE IF NOT EXISTS offers (
-            id          INTEGER PRIMARY KEY,
-            city        TEXT NOT NULL,
-            title       TEXT,
-            price_pln   INTEGER,
-            area_m2     REAL,
-            rooms       INTEGER,
-            floor       INTEGER,
-            address     TEXT,
-            url         TEXT,
-            scraped_at  TEXT,
-            developer   TEXT,
-            market      TEXT,
-            development TEXT,
-            district    TEXT
+            id               INTEGER PRIMARY KEY,
+            city             TEXT NOT NULL,
+            title            TEXT,
+            price_pln        INTEGER,
+            area_m2          REAL,
+            rooms            INTEGER,
+            floor            INTEGER,
+            address          TEXT,
+            url              TEXT,
+            scraped_at       TEXT,
+            developer        TEXT,
+            market           TEXT,
+            development      TEXT,
+            district         TEXT,
+            first_scraped_at TEXT
         )
     """)
-    # Add new columns to existing tables that predate this schema
-    for col, typ in [("developer","TEXT"),("market","TEXT"),("development","TEXT"),("district","TEXT")]:
+    for col, typ in [
+        ("developer","TEXT"), ("market","TEXT"), ("development","TEXT"),
+        ("district","TEXT"), ("first_scraped_at","TEXT"),
+    ]:
         try:
             conn.execute(f"ALTER TABLE offers ADD COLUMN {col} {typ}")
         except Exception:
@@ -123,6 +126,7 @@ def extract_row(item, city):
     development = dev_title
     market = "pierwotny" if (dev_title or item.get("developmentId")) else "wtórny"
 
+    now = datetime.now().isoformat(timespec="seconds")
     return {
         "id": item.get("id"),
         "city": city,
@@ -133,7 +137,8 @@ def extract_row(item, city):
         "floor": floor,
         "address": address,
         "url": offer_url,
-        "scraped_at": datetime.now().isoformat(timespec="seconds"),
+        "scraped_at": now,
+        "first_scraped_at": now,
         "developer": developer,
         "market": market,
         "development": development,
@@ -143,12 +148,26 @@ def extract_row(item, city):
 
 def save_rows(conn, rows):
     conn.executemany("""
-        INSERT OR REPLACE INTO offers
+        INSERT INTO offers
             (id, city, title, price_pln, area_m2, rooms, floor, address, url, scraped_at,
-             developer, market, development, district)
+             developer, market, development, district, first_scraped_at)
         VALUES
             (:id, :city, :title, :price_pln, :area_m2, :rooms, :floor, :address, :url, :scraped_at,
-             :developer, :market, :development, :district)
+             :developer, :market, :development, :district, :first_scraped_at)
+        ON CONFLICT(id) DO UPDATE SET
+            city        = excluded.city,
+            title       = excluded.title,
+            price_pln   = excluded.price_pln,
+            area_m2     = excluded.area_m2,
+            rooms       = excluded.rooms,
+            floor       = excluded.floor,
+            address     = excluded.address,
+            url         = excluded.url,
+            scraped_at  = excluded.scraped_at,
+            developer   = excluded.developer,
+            market      = excluded.market,
+            development = excluded.development,
+            district    = excluded.district
     """, rows)
     conn.commit()
 
