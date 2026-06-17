@@ -22,7 +22,24 @@ DB_PATH = os.path.join(os.path.dirname(__file__), 'offers.db')
 _IS_VERCEL = bool(os.environ.get('VERCEL'))
 _VERCEL_DB = '/tmp/offers.db'
 
-if _IS_VERCEL and not os.path.exists(_VERCEL_DB):
+# ── Supabase ──────────────────────────────────────────────────────
+SUPABASE_URL = os.getenv('SUPABASE_URL', '')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY', '')
+USE_SUPABASE = bool(SUPABASE_URL and SUPABASE_KEY)
+
+_supa_client = None
+
+
+def supa():
+    global _supa_client
+    if _supa_client is None:
+        from supabase import create_client
+        _supa_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+    return _supa_client
+
+
+# ── SQLite fallback (gdy brak Supabase) ──────────────────────────
+if _IS_VERCEL and not USE_SUPABASE and not os.path.exists(_VERCEL_DB):
     import shutil
     _bundled = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'offers.db')
     if os.path.exists(_bundled):
@@ -36,6 +53,13 @@ def get_db_path():
 
 
 def get_offers():
+    if USE_SUPABASE:
+        res = supa().table('offers').select(
+            'id,city,title,price_pln,area_m2,rooms,floor,'
+            'address,url,developer,market,development,district,'
+            'scraped_at,first_scraped_at'
+        ).order('id').execute()
+        return res.data or []
     conn = sqlite3.connect(get_db_path())
     conn.row_factory = sqlite3.Row
     rows = conn.execute(
@@ -48,6 +72,12 @@ def get_offers():
 
 
 def get_investments():
+    if USE_SUPABASE:
+        res = supa().table('investments').select(
+            'id,developer,city,district,investment_name,status,'
+            'apartments_total,price_min,price_max,completion_year'
+        ).order('city').order('developer').order('completion_year', desc=True).execute()
+        return res.data or []
     conn = sqlite3.connect(get_db_path())
     conn.row_factory = sqlite3.Row
     try:
@@ -63,6 +93,8 @@ def get_investments():
 
 
 def init_users_db():
+    if USE_SUPABASE:
+        return  # tabele tworzone w Supabase SQL Editor
     conn = sqlite3.connect(get_db_path())
     sc.init_db(conn)
     conn.execute("""
@@ -139,12 +171,18 @@ def index():
 
     favorite_ids = []
     if 'user_id' in session:
-        conn = sqlite3.connect(get_db_path())
-        rows = conn.execute(
-            'SELECT offer_id FROM favorites WHERE user_id = ?', (session['user_id'],)
-        ).fetchall()
-        conn.close()
-        favorite_ids = [r[0] for r in rows]
+        if USE_SUPABASE:
+            res = supa().table('favorites').select('offer_id').eq(
+                'user_id', session['user_id']
+            ).execute()
+            favorite_ids = [r['offer_id'] for r in (res.data or [])]
+        else:
+            conn = sqlite3.connect(get_db_path())
+            rows = conn.execute(
+                'SELECT offer_id FROM favorites WHERE user_id = ?', (session['user_id'],)
+            ).fetchall()
+            conn.close()
+            favorite_ids = [r[0] for r in rows]
 
     return render_template(
         'index.html',
@@ -168,6 +206,18 @@ def register_page():
             return render_template('register.html', error='Hasła nie są zgodne')
         if len(password) < 4:
             return render_template('register.html', error='Hasło musi mieć co najmniej 4 znaki')
+        if USE_SUPABASE:
+            try:
+                supa().table('users').insert({
+                    'login':         login_val,
+                    'password_hash': generate_password_hash(password),
+                    'created_at':    datetime.now().isoformat(timespec='seconds'),
+                }).execute()
+                return redirect(url_for('login_page', registered=1))
+            except Exception as e:
+                if 'duplicate' in str(e).lower() or '23505' in str(e):
+                    return render_template('register.html', error='Ta nazwa użytkownika jest już zajęta')
+                raise
         conn = sqlite3.connect(get_db_path())
         try:
             conn.execute(
@@ -188,10 +238,15 @@ def login_page():
     if request.method == 'POST':
         login_val = request.form.get('login', '').strip()
         password  = request.form.get('password', '')
-        conn = sqlite3.connect(get_db_path())
-        conn.row_factory = sqlite3.Row
-        user = conn.execute('SELECT * FROM users WHERE login = ?', (login_val,)).fetchone()
-        conn.close()
+        if USE_SUPABASE:
+            res  = supa().table('users').select('*').eq('login', login_val).execute()
+            user = res.data[0] if res.data else None
+        else:
+            conn = sqlite3.connect(get_db_path())
+            conn.row_factory = sqlite3.Row
+            row  = conn.execute('SELECT * FROM users WHERE login = ?', (login_val,)).fetchone()
+            conn.close()
+            user = dict(row) if row else None
         if user and check_password_hash(user['password_hash'], password):
             session['user_id']  = user['id']
             session['username'] = user['login']
@@ -214,13 +269,23 @@ def favorites_add():
     offer_id = data.get('offer_id') if data else None
     if not offer_id:
         return jsonify({'ok': False}), 400
-    conn = sqlite3.connect(get_db_path())
-    conn.execute(
-        'INSERT OR IGNORE INTO favorites (user_id, offer_id, added_at) VALUES (?, ?, ?)',
-        (session['user_id'], offer_id, datetime.now().isoformat(timespec='seconds'))
-    )
-    conn.commit()
-    conn.close()
+    if USE_SUPABASE:
+        try:
+            supa().table('favorites').insert({
+                'user_id':  session['user_id'],
+                'offer_id': offer_id,
+                'added_at': datetime.now().isoformat(timespec='seconds'),
+            }).execute()
+        except Exception:
+            pass  # ignoruj duplikat
+    else:
+        conn = sqlite3.connect(get_db_path())
+        conn.execute(
+            'INSERT OR IGNORE INTO favorites (user_id, offer_id, added_at) VALUES (?, ?, ?)',
+            (session['user_id'], offer_id, datetime.now().isoformat(timespec='seconds'))
+        )
+        conn.commit()
+        conn.close()
     return jsonify({'ok': True})
 
 
@@ -232,13 +297,18 @@ def favorites_remove():
     offer_id = data.get('offer_id') if data else None
     if not offer_id:
         return jsonify({'ok': False}), 400
-    conn = sqlite3.connect(get_db_path())
-    conn.execute(
-        'DELETE FROM favorites WHERE user_id = ? AND offer_id = ?',
-        (session['user_id'], offer_id)
-    )
-    conn.commit()
-    conn.close()
+    if USE_SUPABASE:
+        supa().table('favorites').delete().eq(
+            'user_id', session['user_id']
+        ).eq('offer_id', offer_id).execute()
+    else:
+        conn = sqlite3.connect(get_db_path())
+        conn.execute(
+            'DELETE FROM favorites WHERE user_id = ? AND offer_id = ?',
+            (session['user_id'], offer_id)
+        )
+        conn.commit()
+        conn.close()
     return jsonify({'ok': True})
 
 

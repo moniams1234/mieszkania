@@ -4,3 +4,4 @@ python-dotenv==1.2.2
 discord.py==2.7.1
 pytest==9.0.3
 playwright>=1.40
+supabase>=2.0.0
