@@ -265,7 +265,7 @@ def scrape():
 def _auto_scrape_task():
     while True:
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = sqlite3.connect(get_db_path())
             sc.init_db(conn)
             all_rows, city_counts = [], []
             for city, url in sc.URLS:
