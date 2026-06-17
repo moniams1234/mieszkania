@@ -135,6 +135,8 @@
     .badge { display: inline-block; border-radius: 20px; padding: 2px 9px; font-size: 10px; font-weight: 700; letter-spacing: .04em; white-space: nowrap; text-transform: uppercase; }
     .badge-pierwotny { background: rgba(201,168,76,.12); color: #d4af60; border: 1px solid rgba(201,168,76,.25); }
     .badge-wtorny    { background: rgba(255,255,255,.04); color: var(--muted); border: 1px solid var(--border); }
+    .badge-new       { background: rgba(34,211,165,.15); color: #34d399; border: 1px solid rgba(34,211,165,.35); animation: pulse-new 2s ease-in-out infinite; }
+    @keyframes pulse-new { 0%,100%{box-shadow:0 0 0 0 rgba(34,211,165,.0)} 50%{box-shadow:0 0 6px 2px rgba(34,211,165,.25)} }
 
     .city-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; flex-shrink: 0; }
     .dot-gdansk   { background: var(--gdansk);   box-shadow: 0 0 6px rgba(59,130,246,.7); }
@@ -183,6 +185,16 @@
     .heart-btn { background: none; border: none; cursor: pointer; font-size: 15px; color: var(--muted); transition: color .15s, transform .15s; padding: 2px 6px; border-radius: 4px; line-height: 1; }
     .heart-btn:hover { color: var(--negative); transform: scale(1.2); }
     .heart-btn.fav  { color: var(--negative); text-shadow: 0 0 8px rgba(248,113,113,.4); }
+
+    /* ── History Modal ── */
+    .history-modal-overlay { position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:100;display:none;align-items:center;justify-content:center; }
+    .history-modal-overlay.open { display:flex; }
+    .history-modal-box { background:var(--surface);border:1px solid var(--border-gold);border-radius:20px;padding:32px;width:620px;max-width:92vw;max-height:80vh;overflow-y:auto;position:relative; }
+    .history-modal-close { position:absolute;top:16px;right:16px;background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;line-height:1; }
+    .history-stat-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:24px; }
+    .history-stat-card { background:var(--surface2);border-radius:12px;padding:14px;border:1px solid var(--border); }
+    .history-stat-label { font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px; }
+    .history-stat-value { font-size:20px;font-weight:700;color:var(--positive); }
 
     /* ── Auth in topbar ── */
     .topbar-auth { margin-left: auto; display: flex; align-items: center; gap: 10px; }
@@ -264,6 +276,13 @@
       <label><input type="checkbox" name="cities" value="Wroclaw" checked> Wrocław (dolnośląskie)</label>
     </div>
     <button type="submit" id="scrapeBtn" class="btn btn-primary" style="margin-left:auto">Odśwież oferty</button>
+    <button type="button" id="historyBtn" class="btn btn-secondary" onclick="startHistoryFetch()" style="margin-left:8px">📈 Pobierz historię</button>
+    <div id="historyProgress" style="display:none;align-items:center;gap:10px;font-size:12px;color:var(--muted)">
+      <div style="width:140px;background:var(--surface2);border-radius:4px;height:6px;overflow:hidden">
+        <div id="historyBar" style="height:6px;background:var(--positive);width:0%;transition:width .3s"></div>
+      </div>
+      <span id="historyProgressText">0 / 0</span>
+    </div>
   </form>
 
   {% if status %}
@@ -311,6 +330,13 @@
         <option value="wtórny">Wtórny</option>
       </select>
     </div>
+    <div class="divider"></div>
+    <div class="filter-group">
+      <label style="display:flex;align-items:center;gap:7px;cursor:pointer;user-select:none">
+        <input type="checkbox" id="onlyNew" style="accent-color:var(--positive);width:15px;height:15px;cursor:pointer" onchange="applyFilters()">
+        <span class="filter-label" style="color:var(--positive)">Tylko nowe</span>
+      </label>
+    </div>
     <div class="ml-auto" style="display:flex;gap:8px">
       <button class="btn btn-primary"   onclick="applyFilters()">Filtruj</button>
       <button class="btn btn-secondary" onclick="resetFilters()">Reset</button>
@@ -338,6 +364,7 @@
           <th class="sortable c" data-col="rooms"   onclick="sortBy('rooms')">Pok.</th>
           <th class="sortable c" data-col="floor"   onclick="sortBy('floor')">Piętro</th>
           <th>Adres</th>
+          <th class="c">Historia</th>
         </tr>
       </thead>
       <tbody id="tableBody"></tbody>
@@ -516,6 +543,7 @@ function fmtZl(n) { return n != null ? n.toLocaleString('pl-PL') + ' zł' : '—
 function fmtN(n)  { return n != null ? n.toLocaleString('pl-PL') : '—'; }
 function avg(arr) { const v = arr.filter(x => x != null); return v.length ? v.reduce((a,b)=>a+b,0)/v.length : null; }
 function ppm(o)   { return (o.price_pln && o.area_m2) ? Math.round(o.price_pln / o.area_m2) : null; }
+function isNew(o) { return o.first_scraped_at && (Date.now() - new Date(o.first_scraped_at).getTime()) < 15 * 60 * 1000; }
 
 /* ── Tab switching ── */
 function showTab(id, btn) {
@@ -588,9 +616,11 @@ function renderRow(o) {
   const marketBadge = o.market
     ? `<span class="badge badge-${o.market === 'pierwotny' ? 'pierwotny' : 'wtorny'}">${o.market === 'pierwotny' ? 'Pierwotny' : 'Wtórny'}</span>`
     : '<span class="muted">—</span>';
+  const newBadge = isNew(o) ? ' <span class="badge badge-new">NOWE</span>' : '';
   const titleCell = o.url
-    ? `<a href="${o.url}" target="_blank" rel="noopener">${o.title}</a>`
-    : o.title;
+    ? `<a href="${o.url}" target="_blank" rel="noopener">${o.title}</a>${newBadge}`
+    : o.title + newBadge;
+  const histBtn = `<button class="btn btn-secondary" style="padding:3px 9px;font-size:11px;min-width:32px" onclick="showHistory(${o.id},${JSON.stringify(o.title||'')})" title="Historia i statystyki">📈</button>`;
   const isFav = FAVORITE_IDS.has(o.id);
   const heartBtn = `<button class="heart-btn${isFav ? ' fav' : ''}" onclick="toggleFavorite(${o.id}, this)" title="${isFav ? 'Usuń z ulubionych' : 'Dodaj do ulubionych'}">♥</button>`;
   return `<tr>
@@ -606,6 +636,7 @@ function renderRow(o) {
     <td class="c">${o.rooms != null ? o.rooms : '—'}</td>
     <td class="c">${o.floor != null ? o.floor : '—'}</td>
     <td class="muted" style="font-size:12px">${o.address || '—'}</td>
+    <td class="c">${histBtn}</td>
   </tr>`;
 }
 
@@ -613,7 +644,7 @@ function render() {
   const body = document.getElementById('tableBody');
   document.getElementById('tableCount').textContent = filtered.length + ' z ' + ALL.length + ' ofert';
   if (!filtered.length) {
-    body.innerHTML = `<tr><td colspan="12" class="no-results">Brak ofert spełniających kryteria</td></tr>`;
+    body.innerHTML = `<tr><td colspan="13" class="no-results">Brak ofert spełniających kryteria</td></tr>`;
     return;
   }
   body.innerHTML = filtered.map(renderRow).join('');
@@ -626,6 +657,7 @@ function applyFilters() {
   const rooms  = document.getElementById('roomsFilter').value;
   const market = document.getElementById('marketFilter').value;
 
+  const onlyNew = document.getElementById('onlyNew').checked;
   filtered = ALL.filter(o => {
     if (city && o.city !== city) return false;
     if (o.price_pln != null && (o.price_pln < minP || o.price_pln > maxP)) return false;
@@ -634,6 +666,7 @@ function applyFilters() {
       if (rooms !== '4' && o.rooms !== parseInt(rooms)) return false;
     }
     if (market && o.market !== market) return false;
+    if (onlyNew && !isNew(o)) return false;
     return true;
   });
   applySort(false);
@@ -641,9 +674,9 @@ function applyFilters() {
 
 function resetFilters() {
   ['cityFilter','priceMin','priceMax','roomsFilter','marketFilter'].forEach(id => {
-    const el = document.getElementById(id);
-    el.value = '';
+    document.getElementById(id).value = '';
   });
+  document.getElementById('onlyNew').checked = false;
   filtered = [...ALL];
   applySort(false);
 }
@@ -993,6 +1026,136 @@ document.getElementById('scrapeForm').addEventListener('submit', function(e) {
 const statusBanner = document.getElementById('statusBanner');
 if (statusBanner) setTimeout(() => statusBanner.style.display = 'none', 6000);
 
+/* ── History ── */
+let _historyPollInterval = null;
+
+function startHistoryFetch() {
+  const btn = document.getElementById('historyBtn');
+  btn.disabled = true;
+  btn.textContent = 'Pobieranie...';
+  document.getElementById('historyProgress').style.display = 'flex';
+
+  fetch('/history/fetch', { method: 'POST' })
+    .then(r => r.json())
+    .then(d => {
+      if (!d.ok) {
+        alert('Błąd: ' + d.error);
+        btn.disabled = false;
+        btn.textContent = '📈 Pobierz historię';
+        document.getElementById('historyProgress').style.display = 'none';
+        return;
+      }
+      _historyPollInterval = setInterval(pollHistoryStatus, 2000);
+    })
+    .catch(() => {
+      btn.disabled = false;
+      btn.textContent = '📈 Pobierz historię';
+    });
+}
+
+function pollHistoryStatus() {
+  fetch('/history/status').then(r => r.json()).then(d => {
+    const pct = d.total > 0 ? Math.round(d.done / d.total * 100) : 0;
+    document.getElementById('historyBar').style.width = pct + '%';
+    document.getElementById('historyProgressText').textContent = d.done + ' / ' + d.total;
+    if (!d.running) {
+      clearInterval(_historyPollInterval);
+      const btn = document.getElementById('historyBtn');
+      btn.disabled = false;
+      btn.textContent = '📈 Pobierz historię';
+      if (d.error) alert('Błąd Playwright: ' + d.error);
+    }
+  });
+}
+
+async function showHistory(offerId, title) {
+  document.getElementById('historyModalTitle').textContent = title;
+  document.getElementById('historyModalContent').innerHTML =
+    '<p style="color:var(--muted);text-align:center;padding:24px 0">Ładowanie...</p>';
+  document.getElementById('historyModal').classList.add('open');
+
+  const d = await fetch('/history/' + offerId).then(r => r.json());
+
+  if (!d) {
+    document.getElementById('historyModalContent').innerHTML =
+      '<p style="color:var(--muted)">Brak danych historycznych dla tej oferty.<br>Kliknij <strong>📈 Pobierz historię</strong> aby pobrać dane z Otodom.</p>';
+    return;
+  }
+
+  let html = '';
+
+  const stats = [
+    d.views_count    != null ? ['Wyświetleń',   d.views_count]                : null,
+    d.days_on_market != null ? ['Dni na rynku', d.days_on_market]             : null,
+    d.first_listed_at        ? ['Wystawione',   d.first_listed_at.slice(0,10)]: null,
+    d.fetched_at             ? ['Dane z',       d.fetched_at.slice(0,16)]     : null,
+  ].filter(Boolean);
+
+  if (stats.length) {
+    html += '<div class="history-stat-grid">' +
+      stats.map(([label, val]) =>
+        `<div class="history-stat-card">
+          <div class="history-stat-label">${label}</div>
+          <div class="history-stat-value">${val}</div>
+        </div>`
+      ).join('') + '</div>';
+  }
+
+  if (d.price_history && d.price_history.length) {
+    html += '<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px">Historia cen</div>';
+    html += '<div style="position:relative;height:200px"><canvas id="historyChart"></canvas></div>';
+    document.getElementById('historyModalContent').innerHTML = html;
+
+    const labels = d.price_history.map(h => h.date);
+    const prices = d.price_history.map(h =>
+      typeof h.price === 'number' ? h.price
+      : parseInt(String(h.price || '').replace(/\D/g, '')) || null
+    );
+
+    new Chart(document.getElementById('historyChart'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Cena (zł)',
+          data: prices,
+          borderColor: '#c9a84c',
+          backgroundColor: 'rgba(201,168,76,.1)',
+          borderWidth: 2,
+          pointRadius: 5,
+          tension: 0.2,
+          fill: true,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => ctx.parsed.y != null ? ctx.parsed.y.toLocaleString('pl-PL') + ' zł' : '—' } }
+        },
+        scales: {
+          x: { grid: { color: 'rgba(255,255,255,.04)' }, ticks: { font: { size: 10 } } },
+          y: { grid: { color: 'rgba(255,255,255,.04)' }, ticks: { callback: v => (v/1000).toFixed(0) + 'k' } }
+        }
+      }
+    });
+    return;
+  }
+
+  if (!html) {
+    html = '<p style="color:var(--muted)">Pobrano dane, ale sekcja "Historia i statystyki" nie zawierała danych dla tej oferty.</p>';
+  }
+  document.getElementById('historyModalContent').innerHTML = html;
+}
+
+function closeHistoryModal() {
+  document.getElementById('historyModal').classList.remove('open');
+}
+document.getElementById('historyModal').addEventListener('click', function(e) {
+  if (e.target === this) closeHistoryModal();
+});
+
 /* ── Init ── */
 buildOffersKPIs();
 buildOffersCharts();
@@ -1000,5 +1163,12 @@ applySort(false);
 buildStatsTab();
 updateFavCount();
 </script>
+<div id="historyModal" class="history-modal-overlay">
+  <div class="history-modal-box">
+    <button class="history-modal-close" onclick="closeHistoryModal()">✕</button>
+    <h3 id="historyModalTitle" style="font-size:15px;font-weight:700;margin-bottom:20px;color:var(--text);padding-right:32px"></h3>
+    <div id="historyModalContent"></div>
+  </div>
+</div>
 </body>
 </html>
