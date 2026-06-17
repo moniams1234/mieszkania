@@ -22,13 +22,15 @@ DB_PATH = os.path.join(os.path.dirname(__file__), 'offers.db')
 _IS_VERCEL = bool(os.environ.get('VERCEL'))
 _VERCEL_DB = '/tmp/offers.db'
 
+if _IS_VERCEL and not os.path.exists(_VERCEL_DB):
+    import shutil
+    _bundled = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'offers.db')
+    if os.path.exists(_bundled):
+        shutil.copy2(_bundled, _VERCEL_DB)
+
 
 def get_db_path():
     if _IS_VERCEL:
-        # Vercel filesystem is read-only except /tmp; copy bundled DB on first use
-        if not os.path.exists(_VERCEL_DB) and os.path.exists(DB_PATH):
-            import shutil
-            shutil.copy2(DB_PATH, _VERCEL_DB)
         return _VERCEL_DB
     return app.config.get('DB_PATH', DB_PATH)
 
