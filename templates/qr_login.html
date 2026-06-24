@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Logowanie QR — Mieszkania</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root { --bg: #03080f; --surface: #070f1c; --border: rgba(255,255,255,.07); --text: #edf2ff; --muted: #4a6888; --accent: #c9a84c; --positive: #22d3a5; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 40px; text-align: center; max-width: 400px; width: 90%; }
+    h2 { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+    .sub { color: var(--muted); font-size: 13px; margin-bottom: 28px; }
+    .qr-img { background: #fff; border-radius: 12px; padding: 16px; display: inline-block; margin-bottom: 24px; }
+    .qr-img img { width: 220px; height: 220px; display: block; }
+    .timer { font-size: 13px; color: var(--muted); margin-bottom: 20px; }
+    .timer span { color: var(--accent); font-weight: 600; }
+    .status { font-size: 14px; font-weight: 600; padding: 10px 20px; border-radius: 10px; display: inline-block; margin-bottom: 20px; }
+    .status.pending  { background: rgba(74,104,136,.2); color: var(--muted); }
+    .status.success  { background: rgba(34,211,165,.15); color: var(--positive); }
+    .status.expired  { background: rgba(248,113,113,.15); color: #f87171; }
+    a.back { color: var(--muted); font-size: 13px; text-decoration: none; }
+    a.back:hover { color: var(--text); }
+  </style>
+</head>
+<body>
+<div class="card">
+  <h2>Zaloguj się telefonem</h2>
+  <p class="sub">Zeskanuj poniższy kod QR telefonem.<br>Token wygasa za <span id="countdown">{{ expires_in }}:00</span>.</p>
+  <div class="qr-img">
+    <img src="data:image/png;base64,{{ qr_b64 }}" alt="QR kod logowania">
+  </div>
+  <div class="timer">Ważny przez <span>{{ expires_in }} minut</span></div>
+  <div class="status pending" id="status-box">Oczekiwanie na skan…</div>
+  <br>
+  <a href="/" class="back">← Wróć do listy</a>
+</div>
+
+<script>
+const TOKEN = "{{ token }}";
+let secondsLeft = {{ expires_in }} * 60;
+
+const statusBox  = document.getElementById('status-box');
+const countdown  = document.getElementById('countdown');
+
+function updateCountdown() {
+  const m = Math.floor(secondsLeft / 60);
+  const s = secondsLeft % 60;
+  countdown.textContent = `${m}:${s.toString().padStart(2,'0')}`;
+  if (secondsLeft <= 0) {
+    statusBox.textContent = 'Token wygasł';
+    statusBox.className   = 'status expired';
+    clearInterval(timer);
+    clearInterval(poller);
+  }
+  secondsLeft--;
+}
+
+async function pollStatus() {
+  try {
+    const resp = await fetch(`/qr/status/${TOKEN}`);
+    const data = await resp.json();
+    if (data.status === 'used') {
+      statusBox.textContent = '✅ Zalogowano! Odśwież stronę.';
+      statusBox.className   = 'status success';
+      clearInterval(poller);
+      setTimeout(() => location.reload(), 1500);
+    } else if (data.status === 'expired') {
+      statusBox.textContent = 'Token wygasł';
+      statusBox.className   = 'status expired';
+      clearInterval(poller);
+    }
+  } catch {}
+}
+
+const timer  = setInterval(updateCountdown, 1000);
+const poller = setInterval(pollStatus, 3000);
+updateCountdown();
+</script>
+</body>
+</html>

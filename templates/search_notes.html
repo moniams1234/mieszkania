@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Szukaj po notatkach — Mieszkania</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root { --bg: #03080f; --surface: #070f1c; --surface2: #0c1829; --border: rgba(255,255,255,.07); --text: #edf2ff; --muted: #4a6888; --accent: #c9a84c; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; min-height: 100vh; }
+    .topbar { background: rgba(3,8,15,.88); backdrop-filter: blur(24px); border-bottom: 1px solid rgba(201,168,76,.12); height: 62px; padding: 0 32px; display: flex; align-items: center; gap: 16px; position: sticky; top: 0; z-index: 20; }
+    .topbar-logo { font-size: 17px; font-weight: 700; background: linear-gradient(90deg,#d4af60,#f0d590,#b8922a); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .page { max-width: 900px; margin: 0 auto; padding: 32px; }
+    h2 { font-size: 20px; font-weight: 700; margin-bottom: 20px; }
+    .search-form { display: flex; gap: 10px; margin-bottom: 28px; }
+    .search-input { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; color: var(--text); font-family: inherit; font-size: 14px; }
+    .search-input:focus { outline: none; border-color: var(--accent); }
+    .btn { padding: 12px 20px; border: none; border-radius: 10px; background: var(--accent); color: #03080f; font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .btn:hover { opacity: .85; }
+    .results { display: flex; flex-direction: column; gap: 12px; }
+    .result-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .result-title { font-weight: 600; margin-bottom: 4px; }
+    .result-meta { font-size: 12px; color: var(--muted); }
+    .result-price { font-size: 18px; font-weight: 700; color: var(--accent); white-space: nowrap; }
+    a.result-link { color: inherit; text-decoration: none; display: block; flex: 1; }
+    a.result-link:hover .result-title { color: var(--accent); }
+    .empty { color: var(--muted); font-style: italic; }
+    .back { color: var(--muted); font-size: 13px; text-decoration: none; }
+    .back:hover { color: var(--text); }
+  </style>
+</head>
+<body>
+<div class="topbar">
+  <span class="topbar-logo">🏠 Mieszkania</span>
+  <a href="/" class="back">← Lista ofert</a>
+  <div style="flex:1"></div>
+  {% if username %}<span style="color:var(--muted);font-size:13px">{{ username }}</span>{% endif %}
+</div>
+<div class="page">
+  <h2>Szukaj po notatkach</h2>
+  <form class="search-form" method="get">
+    <input class="search-input" name="q" value="{{ query }}" placeholder="Wpisz fragment notatki…" autofocus>
+    <button type="submit" class="btn">Szukaj</button>
+  </form>
+
+  {% if query %}
+    {% if results %}
+      <div class="results">
+        {% for offer in results %}
+        <div class="result-card">
+          <a href="/offer/{{ offer.id }}" class="result-link">
+            <div class="result-title">{{ offer.title or 'Brak tytułu' }}</div>
+            <div class="result-meta">{{ offer.city }}</div>
+          </a>
+          <div class="result-price">
+            {% if offer.price_pln %}{{ '{:,}'.format(offer.price_pln).replace(',', ' ') }} zł{% else %}—{% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="empty">Brak wyników dla „{{ query }}".</p>
+    {% endif %}
+  {% endif %}
+</div>
+</body>
+</html>

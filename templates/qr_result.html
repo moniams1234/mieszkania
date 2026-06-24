@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Logowanie QR — wynik</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', sans-serif; background: #03080f; color: #edf2ff; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .card { background: #070f1c; border: 1px solid rgba(255,255,255,.07); border-radius: 20px; padding: 40px; text-align: center; max-width: 360px; width: 90%; }
+    .icon { font-size: 56px; margin-bottom: 16px; }
+    h2 { font-size: 20px; font-weight: 700; margin-bottom: 10px; }
+    p { color: #4a6888; font-size: 14px; }
+    a { display: inline-block; margin-top: 24px; color: #c9a84c; font-size: 14px; text-decoration: none; }
+  </style>
+</head>
+<body>
+<div class="card">
+  {% if success %}
+  <div class="icon">✅</div>
+  <h2>Zalogowano!</h2>
+  <p>Witaj, <strong style="color:#edf2ff">{{ username }}</strong>!</p>
+  <a href="/">Przejdź do aplikacji →</a>
+  {% else %}
+  <div class="icon">❌</div>
+  <h2>Błąd logowania</h2>
+  <p>{{ error }}</p>
+  <a href="/">Wróć do strony głównej</a>
+  {% endif %}
+</div>
+</body>
+</html>

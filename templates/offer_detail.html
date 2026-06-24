@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ offer.title or 'Ogłoszenie' }} — Mieszkania</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #03080f; --surface: #070f1c; --surface2: #0c1829;
+      --border: rgba(255,255,255,.07); --text: #edf2ff; --muted: #4a6888;
+      --accent: #c9a84c; --positive: #22d3a5; --negative: #f87171;
+    }
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; min-height: 100vh; }
+    .topbar {
+      background: rgba(3,8,15,.88); backdrop-filter: blur(24px);
+      border-bottom: 1px solid rgba(201,168,76,.12);
+      height: 62px; padding: 0 32px; display: flex; align-items: center; gap: 16px;
+      position: sticky; top: 0; z-index: 20;
+    }
+    .topbar-logo {
+      font-size: 17px; font-weight: 700;
+      background: linear-gradient(90deg, #d4af60, #f0d590, #b8922a);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .topbar a { color: var(--muted); text-decoration: none; font-size: 13px; }
+    .topbar a:hover { color: var(--text); }
+    .page { max-width: 1100px; margin: 0 auto; padding: 32px; display: flex; flex-direction: column; gap: 24px; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 28px; }
+    h1 { font-size: 22px; font-weight: 700; letter-spacing: -.02em; margin-bottom: 8px; }
+    .meta { display: flex; gap: 16px; flex-wrap: wrap; color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+    .meta span { display: flex; align-items: center; gap: 4px; }
+    .prices-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .price-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+    .price-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 6px; }
+    .price-value { font-size: 24px; font-weight: 700; letter-spacing: -.02em; }
+    .price-value.pln { color: var(--accent); }
+    .price-value.foreign { color: var(--positive); }
+    .section-title { font-size: 15px; font-weight: 600; margin-bottom: 16px; }
+    .chart-wrap { position: relative; height: 260px; }
+    /* Notatki */
+    .note-form { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+    .note-input { flex: 1; min-width: 200px; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; color: var(--text); font-family: inherit; font-size: 14px; resize: none; height: 44px; }
+    .note-input:focus { outline: none; border-color: var(--accent); }
+    .btn { padding: 10px 20px; border: none; border-radius: 10px; font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity .2s; }
+    .btn-gold { background: var(--accent); color: #03080f; }
+    .btn-gold:hover { opacity: .85; }
+    .btn-sm { padding: 6px 14px; font-size: 12px; border-radius: 8px; }
+    .notes-list { display: flex; flex-direction: column; gap: 10px; }
+    .note-item { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+    .note-text { margin-bottom: 6px; line-height: 1.55; }
+    .note-date { font-size: 11px; color: var(--muted); }
+    /* Tagi */
+    .tag-form { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .tag-input { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-family: inherit; font-size: 13px; width: 180px; }
+    .tag-input:focus { outline: none; border-color: var(--accent); }
+    .tags-history { display: flex; flex-wrap: wrap; gap: 8px; }
+    .tag-chip { background: rgba(201,168,76,.12); border: 1px solid rgba(201,168,76,.2); border-radius: 20px; padding: 4px 12px; font-size: 12px; display: flex; align-items: center; gap: 6px; }
+    .tag-chip-date { font-size: 10px; color: var(--muted); }
+    .empty { color: var(--muted); font-size: 13px; font-style: italic; }
+    .offer-link { color: var(--accent); text-decoration: none; font-size: 13px; }
+    .offer-link:hover { text-decoration: underline; }
+    .back-link { color: var(--muted); font-size: 13px; text-decoration: none; }
+    .back-link:hover { color: var(--text); }
+  </style>
+</head>
+<body>
+<div class="topbar">
+  <span class="topbar-logo">🏠 Mieszkania</span>
+  <a href="/" class="back-link">← Wróć do listy</a>
+  <div style="flex:1"></div>
+  {% if username %}<span style="color:var(--muted);font-size:13px">{{ username }}</span>{% endif %}
+</div>
+
+<div class="page">
+
+  <!-- Nagłówek ogłoszenia -->
+  <div class="card">
+    <h1>{{ offer.title or 'Brak tytułu' }}</h1>
+    <div class="meta">
+      <span>📍 {{ offer.city }}{% if offer.district %}, {{ offer.district }}{% endif %}</span>
+      {% if offer.area_m2 %}<span>📐 {{ offer.area_m2 }} m²</span>{% endif %}
+      {% if offer.rooms %}<span>🚪 {{ offer.rooms }} pok.</span>{% endif %}
+      {% if offer.floor is not none %}<span>🏢 {{ offer.floor }} p.</span>{% endif %}
+      {% if offer.market %}<span>🏷 rynek {{ offer.market }}</span>{% endif %}
+    </div>
+    {% if offer.url %}
+    <a href="{{ offer.url }}" target="_blank" rel="noopener" class="offer-link">Otwórz na Otodom →</a>
+    {% endif %}
+  </div>
+
+  <!-- Ceny w 3 walutach -->
+  <div class="card">
+    <div class="section-title">Aktualna cena</div>
+    <div class="prices-grid" id="prices-grid">
+      <div class="price-card">
+        <div class="price-label">PLN</div>
+        <div class="price-value pln" id="price-pln">
+          {% if offer.price_pln %}{{ '{:,}'.format(offer.price_pln).replace(',', ' ') }} zł{% else %}—{% endif %}
+        </div>
+      </div>
+      {% for cur in display_currencies %}
+      <div class="price-card">
+        <div class="price-label">{{ cur }}</div>
+        <div class="price-value foreign" id="price-{{ cur }}">—</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Historia cen -->
+  <div class="card">
+    <div class="section-title">Historia cenowa</div>
+    <div class="chart-wrap">
+      <canvas id="priceChart"></canvas>
+    </div>
+    <p class="empty" id="no-history" style="display:none;margin-top:12px">Brak historii cenowej dla tego ogłoszenia.</p>
+  </div>
+
+  <!-- Notatki -->
+  <div class="card">
+    <div class="section-title">Notatki</div>
+    <div class="note-form">
+      <textarea class="note-input" id="note-input" placeholder="Wpisz notatkę…" rows="2"></textarea>
+      <button class="btn btn-gold" onclick="addNote()">Dodaj</button>
+    </div>
+    <div class="notes-list" id="notes-list">
+      {% for note in notes %}
+      <div class="note-item">
+        <div class="note-text">{{ note.note_text }}</div>
+        <div class="note-date">{{ note.created_at }}</div>
+      </div>
+      {% else %}
+      <p class="empty" id="no-notes">Brak notatek.</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Historia tagów -->
+  <div class="card">
+    <div class="section-title">Historia tagów</div>
+    <div class="tag-form">
+      <input type="text" class="tag-input" id="tag-input" placeholder="np. do-obejrzenia" maxlength="50">
+      <button class="btn btn-gold btn-sm" onclick="addTag()">Dodaj tag</button>
+    </div>
+    <div class="tags-history" id="tags-list">
+      {% for tag in tags %}
+      <span class="tag-chip">
+        {{ tag.tag }}
+        <span class="tag-chip-date">{{ tag.created_at }}</span>
+      </span>
+      {% else %}
+      <p class="empty" id="no-tags">Brak tagów.</p>
+      {% endfor %}
+    </div>
+  </div>
+
+</div>
+
+<script>
+const OFFER_ID    = {{ offer.id }};
+const PRICE_PLN   = {{ offer.price_pln or 'null' }};
+const RATES       = {{ rates | safe }};
+const CURRENCIES  = {{ display_currencies | tojson }};
+const PRICE_HIST  = {{ price_history | safe }};
+
+// Przelicz ceny
+function formatNum(n, decimals = 0) {
+  return n.toLocaleString('pl-PL', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+if (PRICE_PLN) {
+  CURRENCIES.forEach(cur => {
+    const el = document.getElementById('price-' + cur);
+    if (!el) return;
+    const rate = RATES[cur];
+    if (rate) {
+      el.textContent = formatNum(PRICE_PLN / rate, 0) + ' ' + cur;
+    }
+  });
+}
+
+// Wykres historii cenowej
+const ctx = document.getElementById('priceChart').getContext('2d');
+if (PRICE_HIST && PRICE_HIST.length > 0) {
+  const labels = PRICE_HIST.map(p => p.date || p[0] || '');
+  const prices = PRICE_HIST.map(p => p.price || p[1] || null);
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Cena (PLN)',
+        data: prices,
+        borderColor: '#c9a84c',
+        backgroundColor: 'rgba(201,168,76,.08)',
+        tension: .35,
+        fill: true,
+        pointRadius: 4,
+        pointHoverRadius: 7,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#edf2ff' } } },
+      scales: {
+        x: { ticks: { color: '#4a6888', maxTicksLimit: 8 }, grid: { color: 'rgba(255,255,255,.04)' } },
+        y: { ticks: { color: '#4a6888', callback: v => formatNum(v) + ' zł' }, grid: { color: 'rgba(255,255,255,.04)' } }
+      }
+    }
+  });
+} else {
+  document.getElementById('priceChart').style.display = 'none';
+  document.getElementById('no-history').style.display = 'block';
+}
+
+// Dodawanie notatek
+async function addNote() {
+  const inp = document.getElementById('note-input');
+  const text = inp.value.trim();
+  if (!text) return;
+  const resp = await fetch(`/offer/${OFFER_ID}/notes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ note: text }),
+  });
+  const data = await resp.json();
+  if (data.ok) {
+    inp.value = '';
+    const noNotes = document.getElementById('no-notes');
+    if (noNotes) noNotes.remove();
+    const list = document.getElementById('notes-list');
+    const div = document.createElement('div');
+    div.className = 'note-item';
+    div.innerHTML = `<div class="note-text">${escHtml(data.note.note_text)}</div>
+                     <div class="note-date">${data.note.created_at}</div>`;
+    list.prepend(div);
+  }
+}
+
+// Dodawanie tagów
+async function addTag() {
+  const inp = document.getElementById('tag-input');
+  const tag = inp.value.trim().toLowerCase();
+  if (!tag) return;
+  const resp = await fetch(`/offer/${OFFER_ID}/tags`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tag }),
+  });
+  const data = await resp.json();
+  if (data.ok) {
+    inp.value = '';
+    const noTags = document.getElementById('no-tags');
+    if (noTags) noTags.remove();
+    const list = document.getElementById('tags-list');
+    const span = document.createElement('span');
+    span.className = 'tag-chip';
+    span.innerHTML = `${escHtml(data.tag.tag)} <span class="tag-chip-date">${data.tag.created_at}</span>`;
+    list.prepend(span);
+  }
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+document.getElementById('note-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addNote(); }
+});
+document.getElementById('tag-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') addTag();
+});
+</script>
+</body>
+</html>

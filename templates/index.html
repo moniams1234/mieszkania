@@ -213,6 +213,14 @@
   <span class="muted" style="font-size:12px" id="dbInfo"></span>
   <div class="topbar-auth">
     {% if username %}
+      <a href="/search/notes" class="btn-topbar btn-topbar-secondary" title="Szukaj po notatkach">🔍 Notatki</a>
+      <a href="/qr/generate"  class="btn-topbar btn-topbar-secondary" title="Logowanie QR">📱 QR</a>
+      <select id="currency-select" onchange="setCurrency(this.value)" title="Waluta wyświetlania" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:inherit">
+        {% for cur in popular_currencies %}
+        <option value="{{ cur }}" {% if cur == preferred_currency %}selected{% endif %}>{{ cur }}</option>
+        {% endfor %}
+        <option value="PLN" {% if preferred_currency == 'PLN' %}selected{% endif %}>PLN</option>
+      </select>
       <span class="topbar-user">{{ username }}</span>
       <a href="/logout" class="btn-topbar btn-topbar-secondary">Wyloguj</a>
     {% else %}
@@ -532,10 +540,31 @@
 </div>
 
 <script>
-const ALL         = {{ offers_json | safe }};
-const INVESTMENTS = {{ investments_json | safe }};
-const FAVORITE_IDS = new Set({{ favorite_ids | safe }});
-const LOGGED_IN    = {{ 'true' if username else 'false' }};
+const ALL              = {{ offers_json | safe }};
+const INVESTMENTS      = {{ investments_json | safe }};
+const FAVORITE_IDS     = new Set({{ favorite_ids | safe }});
+const LOGGED_IN        = {{ 'true' if username else 'false' }};
+let   PREF_CURRENCY    = {{ preferred_currency | tojson }};
+const CURRENCY_RATES   = {{ currency_rates | safe }};
+
+async function setCurrency(code) {
+  const resp = await fetch('/currency/set', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ currency: code }),
+  });
+  if ((await resp.json()).ok) {
+    PREF_CURRENCY = code;
+    renderOffers();
+  }
+}
+
+function convertPrice(pln, currency) {
+  if (!pln || currency === 'PLN') return null;
+  const rate = CURRENCY_RATES[currency];
+  if (!rate) return null;
+  return Math.round(pln / rate);
+}
 
 Chart.defaults.color      = '#4a6888';
 Chart.defaults.borderColor = 'rgba(255,255,255,.05)';
@@ -627,9 +656,16 @@ function renderRow(o) {
   const titleCell = o.url
     ? `<a href="${o.url}" target="_blank" rel="noopener">${o.title}</a>${newBadge}`
     : o.title + newBadge;
-  const histBtn = `<button class="btn btn-secondary" style="padding:3px 9px;font-size:11px;min-width:32px" onclick="showHistory(${o.id},${JSON.stringify(o.title||'')})" title="Historia i statystyki">📈</button>`;
+  const histBtn   = `<button class="btn btn-secondary" style="padding:3px 9px;font-size:11px;min-width:32px" onclick="showHistory(${o.id},${JSON.stringify(o.title||'')})" title="Historia i statystyki">📈</button>`;
+  const detailBtn = `<a href="/offer/${o.id}" class="btn btn-secondary" style="padding:3px 9px;font-size:11px;min-width:32px;text-decoration:none" title="Szczegóły ogłoszenia">🔍</a>`;
   const isFav = FAVORITE_IDS.has(o.id);
   const heartBtn = `<button class="heart-btn${isFav ? ' fav' : ''}" onclick="toggleFavorite(${o.id}, this)" title="${isFav ? 'Usuń z ulubionych' : 'Dodaj do ulubionych'}">♥</button>`;
+
+  const convPrice = convertPrice(o.price_pln, PREF_CURRENCY);
+  const priceDisplay = PREF_CURRENCY === 'PLN' || !convPrice
+    ? fmtZl(o.price_pln)
+    : `${fmtZl(o.price_pln)}<br><span style="font-size:11px;color:var(--positive)">${convPrice.toLocaleString('pl-PL')} ${PREF_CURRENCY}</span>`;
+
   return `<tr>
     <td class="c">${heartBtn}</td>
     <td class="link-cell">${titleCell}</td>
@@ -637,13 +673,13 @@ function renderRow(o) {
     <td class="c">${marketBadge}</td>
     <td>${o.developer || '<span class="muted">—</span>'}</td>
     <td class="muted" style="font-size:12px">${o.development || '—'}</td>
-    <td class="r price-cell">${fmtZl(o.price_pln)}</td>
+    <td class="r price-cell">${priceDisplay}</td>
     <td class="r muted">${p2m ? fmtN(p2m) : '—'}</td>
     <td class="r">${o.area_m2 != null ? o.area_m2.toFixed(1) : '—'}</td>
     <td class="c">${o.rooms != null ? o.rooms : '—'}</td>
     <td class="c">${o.floor != null ? o.floor : '—'}</td>
     <td class="muted" style="font-size:12px">${o.address || '—'}</td>
-    <td class="c">${histBtn}</td>
+    <td class="c" style="display:flex;gap:4px">${histBtn}${detailBtn}</td>
   </tr>`;
 }
 
